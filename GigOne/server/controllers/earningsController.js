@@ -1,32 +1,60 @@
-const EarningsEntry = require("../models/EarningsEntry"); // the earnings DB model
+/**
+ * @fileoverview Earnings Controller managing the retrieval and persistence of income data.
+ * Facilitates financial tracking for workers across multiple gig platforms.
+ * 
+ * @module server/controllers/earningsController
+ * @requires ../models/EarningsEntry
+ */
 
-// GET /api/earnings  →  fetch all entries for this user
+const EarningsEntry = require("../models/EarningsEntry");
+
+/**
+ * Retrieves the historical earnings entries for the authenticated user.
+ * Results are sorted in reverse chronological order.
+ * 
+ * @async
+ * @function getEarnings
+ * @param {Object} req - Express request object (authenticated).
+ * @param {Object} res - Express response object.
+ * @returns {Promise<void>}
+ */
 const getEarnings = async (req, res) => {
   try {
-    // find only THIS user's entries, newest first
     const entries = await EarningsEntry.find({ userId: req.user.userId }).sort({ date: -1 });
-    res.json(entries); // send the array back to frontend
+    res.json(entries);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-// POST /api/earnings  →  add a new earnings entry
+/**
+ * Records a new earnings entry for the worker.
+ * Implicitly associates the entry with the authenticated user's ID.
+ * 
+ * @async
+ * @function addEarning
+ * @param {Object} req - Express request object.
+ * @param {string} req.body.platform - The gig platform (e.g., 'Uber', 'Swiggy').
+ * @param {number} req.body.amount - Total income earned.
+ * @param {number} req.body.hours - Hours worked during this period.
+ * @param {Date} [req.body.date] - Transaction date.
+ * @param {Object} res - Express response object.
+ * @returns {Promise<void>}
+ */
 const addEarning = async (req, res) => {
-  const { platform, amount, hours, date } = req.body; // get data sent from frontend
+  const { platform, amount, hours, date } = req.body;
   try {
-    // userId comes from the JWT token (set by auth middleware) — not from the body
     const entry = await EarningsEntry.create({
-      userId: req.user.userId, // auto-attached by auth middleware
+      userId: req.user.userId,
       platform,
       amount,
       hours,
-      date,
+      date: date || Date.now(),
     });
-    res.status(201).json(entry); // 201 = Created, send saved entry back
+    res.status(201).json(entry);
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
 };
 
-module.exports = { getEarnings, addEarning }; // expose to routes
+module.exports = { getEarnings, addEarning };

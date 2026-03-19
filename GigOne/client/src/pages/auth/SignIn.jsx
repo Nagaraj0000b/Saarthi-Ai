@@ -1,286 +1,162 @@
+/**
+ * @fileoverview Sign In Page.
+ * Implements a dual-mode authentication interface (User/Admin) with support
+ * for local credentials and Google OAuth 2.0 social login.
+ *
+ * @module client/pages/auth/SignIn
+ * @requires react
+ * @requires react-router-dom
+ * @requires ../../lib/api
+ */
+
+import { useState } from "react";
+import { useNavigate, Link } from "react-router-dom";
+import api from "../../lib/api";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
+  CardDescription,
+  CardFooter,
   CardHeader,
   CardTitle,
-  CardDescription,
 } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { useState } from "react";
-import { useNavigate, Link } from "react-router-dom";
-import api from "../../lib/api"; // Our new Axios tool
 
+/**
+ * SignIn Component
+ *
+ * @component SignIn
+ * @returns {JSX.Element}
+ */
 export default function SignIn() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
   const navigate = useNavigate();
 
-  // Tabs role: controls which sign-in form is visible (User vs Admin).
-  const [role, setRole] = useState("user");
-
-  // Track login errors
-  const [errorMsg, setErrorMsg] = useState("");
-
-  // Form state (controlled inputs). Keeping User/Admin separate avoids
-  // mixing values when toggling between the two tabs.
-  const [userEmail, setUserEmail] = useState("");
-  const [userPassword, setUserPassword] = useState("");
-  const [adminEmail, setAdminEmail] = useState("");
-  const [adminPassword, setAdminPassword] = useState("");
-
-  const handleUserSubmit = async (e) => {
+  /**
+   * Handles local authentication.
+   * On success, persists the JWT and user metadata to LocalStorage.
+   *
+   * @async
+   * @private
+   */
+  const handleLogin = async (e) => {
     e.preventDefault();
-    setErrorMsg(""); // clear old errors
+    setError("");
+    setIsLoading(true);
 
     try {
-      // Send the email and password to the backend using our new 'api' tool
-      const response = await api.post("/auth/login", {
-        email: userEmail,
-        password: userPassword,
-      });
+      const { data } = await api.post("/auth/login", { email, password });
+      localStorage.setItem("token", data.token);
+      localStorage.setItem("user", JSON.stringify(data.user));
 
-      // The backend gives us a token and user details back.
-      const { token, user } = response.data;
-
-      // Save the token into the browser's storage so api.js can find it
-      localStorage.setItem("token", token);
-      localStorage.setItem("user", JSON.stringify(user));
-
-      // Send them to the dashboard!
-      navigate("/user/dashboard");
-    } catch (error) {
-      // Show error message if it exists
-      if (error.response && error.response.data) {
-        setErrorMsg(error.response.data.message);
-      } else {
-        setErrorMsg("Failed to connect to server");
-      }
+      // Role-based routing
+      navigate(
+        data.user.role === "admin" ? "/admin/dashboard" : "/user/dashboard",
+      );
+    } catch (err) {
+      setError(
+        err.response?.data?.message ||
+        "Authentication failed. Please try again.",
+      );
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleAdminSubmit = (e) => {
-    e.preventDefault();
-    navigate("/admin/dashboard");
+  /**
+   * Triggers the Google OAuth redirect flow.
+   * @private
+   */
+  const handleGoogleLogin = () => {
+    window.location.href = "http://localhost:5000/api/auth/google";
   };
 
   return (
-    <div className="signin-page">
-      <div className="signin-card-wrapper">
-        {/* Brand */}
-        <div className="signin-brand">
-          <div className="signin-brand-icon">
-            <svg
-              width="22"
-              height="22"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#fff"
-              strokeWidth="2.2"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-            >
-              <path d="M12 2L2 7l10 5 10-5-10-5z" />
-              <path d="M2 17l10 5 10-5" />
-              <path d="M2 12l10 5 10-5" />
-            </svg>
-          </div>
-          <span className="signin-brand-name">Dashboard</span>
-        </div>
+    <div className="auth-container">
+      <Card className="auth-card">
+        <CardHeader>
+          <CardTitle>Welcome to Project</CardTitle>
+          <CardDescription>Select your portal to continue</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="user">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="user">Worker</TabsTrigger>
+              <TabsTrigger value="admin">Admin</TabsTrigger>
+            </TabsList>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Welcome back</CardTitle>
-            <CardDescription>
-              Sign in to your account to continue
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Tabs value={role} onValueChange={setRole}>
-              <TabsList>
-                <TabsTrigger value="user">User</TabsTrigger>
-                <TabsTrigger value="admin">Admin</TabsTrigger>
-              </TabsList>
-
-              {/* Simple error text if login fails */}
-              {errorMsg && (
-                <div
-                  style={{
-                    color: "#ff4d4f",
-                    fontSize: "0.875rem",
-                    textAlign: "center",
-                    marginBottom: "1rem",
-                    marginTop: "1rem",
-                    padding: "0.5rem",
-                    background: "rgba(255, 77, 79, 0.1)",
-                    borderRadius: "6px",
-                    border: "1px solid rgba(255, 77, 79, 0.2)",
-                  }}
-                >
-                  {errorMsg}
+            <TabsContent value="user">
+              <form onSubmit={handleLogin} className="space-y-4 pt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input
+                    id="email"
+                    type="email"
+                    placeholder="name@example.com"
+                    required
+                    value={email}
+                    onChange={(e) => setEmail(e.target.value)}
+                  />
                 </div>
-              )}
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input
+                    id="password"
+                    type="password"
+                    required
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                  />
+                </div>
+                {error && <p className="text-red-500 text-sm">{error}</p>}
+                <Button type="submit" className="w-full" disabled={isLoading}>
+                  {isLoading ? "Signing In..." : "Sign In"}
+                </Button>
+              </form>
 
-              <TabsContent value="user">
-                <form className="signin-tabs" onSubmit={handleUserSubmit}>
-                  <div className="form-group">
-                    <Label htmlFor="user-email">Email address</Label>
-                    <Input
-                      id="user-email"
-                      type="email"
-                      name="email"
-                      placeholder="you@example.com"
-                      autoComplete="email"
-                      value={userEmail}
-                      onChange={(e) => setUserEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <div
-                      style={{
-                        display: "flex",
-                        justifyContent: "space-between",
-                        alignItems: "center",
-                        width: "100%",
-                      }}
-                    >
-                      <Label htmlFor="user-password">Password</Label>
-                      <Link
-                        to="#"
-                        style={{
-                          fontSize: "0.75rem",
-                          color: "var(--color-primary-light)",
-                          textDecoration: "none",
-                        }}
-                      >
-                        Forgot?
-                      </Link>
-                    </div>
-                    <Input
-                      id="user-password"
-                      type="password"
-                      name="password"
-                      placeholder="Enter your password"
-                      autoComplete="current-password"
-                      value={userPassword}
-                      onChange={(e) => setUserPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit">Sign In as User</Button>
+              <div className="relative my-6">
+                <div className="absolute inset-0 flex items-center">
+                  <span className="w-full border-t" />
+                </div>
+                <div className="relative flex justify-center text-xs uppercase">
+                  <span className="bg-background px-2 text-muted-foreground">
+                    Or continue with
+                  </span>
+                </div>
+              </div>
 
-                  {/* Google Login Section styled to match App.css */}
-                  <div
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      margin: "0.5rem 0",
-                    }}
-                  >
-                    <div
-                      style={{
-                        flex: 1,
-                        height: "1px",
-                        background: "var(--color-border)",
-                      }}
-                    ></div>
-                    <span
-                      style={{
-                        padding: "0 10px",
-                        fontSize: "0.7rem",
-                        textTransform: "uppercase",
-                        color: "var(--color-text-muted)",
-                      }}
-                    >
-                      Or continue with
-                    </span>
-                    <div
-                      style={{
-                        flex: 1,
-                        height: "1px",
-                        background: "var(--color-border)",
-                      }}
-                    ></div>
-                  </div>
+              <Button
+                variant="outline"
+                className="w-full"
+                onClick={handleGoogleLogin}
+              >
+                Google
+              </Button>
+            </TabsContent>
 
-                  <Button
-                    type="button"
-                    style={{
-                      background: "transparent",
-                      border: "1px solid var(--color-border)",
-                      color: "var(--color-text-primary)",
-                      boxShadow: "none",
-                    }}
-                    onClick={() => {
-                      // Redirect to the backend which then redirects to Google
-                      window.location.href =
-                        "http://localhost:5000/api/auth/google";
-                    }}
-                  >
-                    <svg
-                      style={{
-                        marginRight: "8px",
-                        width: "16px",
-                        height: "16px",
-                      }}
-                      aria-hidden="true"
-                      focusable="false"
-                      data-prefix="fab"
-                      data-icon="google"
-                      role="img"
-                      xmlns="http://www.w3.org/2000/svg"
-                      viewBox="0 0 488 512"
-                    >
-                      <path
-                        fill="currentColor"
-                        d="M488 261.8C488 403.3 391.1 504 248 504 110.8 504 0 393.2 0 256S110.8 8 248 8c66.8 0 123 24.5 166.3 64.9l-67.5 64.9C258.5 52.6 94.3 116.6 94.3 256c0 86.5 69.1 156.6 153.7 156.6 98.2 0 135-70.4 140.8-106.9H248v-85.3h236.1c2.3 12.7 3.9 24.9 3.9 41.4z"
-                      ></path>
-                    </svg>
-                    Google
-                  </Button>
-                </form>
-              </TabsContent>
-
-              <TabsContent value="admin">
-                <form className="signin-tabs" onSubmit={handleAdminSubmit}>
-                  <div className="form-group">
-                    <Label htmlFor="admin-email">Email address</Label>
-                    <Input
-                      id="admin-email"
-                      type="email"
-                      name="email"
-                      placeholder="admin@example.com"
-                      autoComplete="email"
-                      value={adminEmail}
-                      onChange={(e) => setAdminEmail(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <div className="form-group">
-                    <Label htmlFor="admin-password">Password</Label>
-                    <Input
-                      id="admin-password"
-                      type="password"
-                      name="password"
-                      placeholder="Enter your password"
-                      autoComplete="current-password"
-                      value={adminPassword}
-                      onChange={(e) => setAdminPassword(e.target.value)}
-                      required
-                    />
-                  </div>
-                  <Button type="submit">Sign In as Admin</Button>
-                </form>
-              </TabsContent>
-            </Tabs>
-
-            <p className="signin-footer">
-              Don't have an account? <Link to="/signup">Sign up</Link>
-            </p>
-          </CardContent>
-        </Card>
-      </div>
+            <TabsContent value="admin">
+              <p className="text-sm text-muted-foreground py-4 text-center">
+                Administrative access requires corporate credentials.
+              </p>
+              {/* Admin login form would mirror User form logic */}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+        <CardFooter className="flex flex-col space-y-2">
+          <p className="text-sm text-center">
+            New here?{" "}
+            <Link to="/signup" className="text-primary hover:underline">
+              Create an account
+            </Link>
+          </p>
+        </CardFooter>
+      </Card>
     </div>
   );
 }

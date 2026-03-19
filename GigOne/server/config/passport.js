@@ -1,8 +1,23 @@
+/**
+ * @fileoverview Passport configuration for Google OAuth 2.0 authentication.
+ * Manages the strategy implementation, user lookup/creation, and session-less serialization.
+ * 
+ * @module server/config/passport
+ * @requires passport
+ * @requires passport-google-oauth20
+ * @requires ../models/User
+ */
+
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const User = require("../models/User");
 
-// Google Strategy
+/**
+ * Google OAuth 2.0 Strategy Configuration
+ * 
+ * Defines the logic for verifying users authenticated via Google. 
+ * Maps Google profile data to the internal User model and handles JIT (Just-In-Time) provisioning.
+ */
 passport.use(
   new GoogleStrategy(
     {
@@ -12,11 +27,11 @@ passport.use(
     },
     async (accessToken, refreshToken, profile, done) => {
       try {
-        // 1. Check if user already exists
+        // Search for existing user by email to prevent duplicate accounts
         let user = await User.findOne({ email: profile.emails[0].value });
         
         if (user) {
-          // If the user exists but doesn't have a googleId, add it
+          // Sync Google ID if it's the first time this existing local user is using OAuth
           if (!user.googleId) {
             user.googleId = profile.id;
             await user.save();
@@ -24,14 +39,12 @@ passport.use(
           return done(null, user);
         }
 
-        // 2. If not, create a new user
-        // We use a dummy passwordHash since they are authenticating via Google
+        // Provision a new user if no match is found
         user = await User.create({
           name: profile.displayName,
           email: profile.emails[0].value,
           googleId: profile.id,
-          // Users signing up via Google won't have a local password
-          // This ensures they don't break the model validation
+          // Placeholder hash for OAuth users to satisfy schema constraints without exposing local auth
           passwordHash: "google_oauth_no_password", 
         });
 
@@ -43,7 +56,11 @@ passport.use(
   )
 );
 
-// We won't use sessions (since we use JWT), but passport needs these defined to not complain
+/**
+ * Serialization Logic
+ * Since the application uses stateless JWTs, these are minimal implementations 
+ * to satisfy Passport's internal requirements.
+ */
 passport.serializeUser((user, done) => {
   done(null, user.id);
 });

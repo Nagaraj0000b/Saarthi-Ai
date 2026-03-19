@@ -1,9 +1,23 @@
+/**
+ * @fileoverview Conversational AI Routes for the Gigi companion.
+ * Manages session initialization and multimodal (audio/text) interaction turns.
+ * 
+ * @module server/routes/chat
+ * @requires express
+ * @requires multer
+ * @requires ../middleware/auth
+ * @requires ../controllers/chatController
+ */
+
 const router  = require("express").Router();
 const multer  = require("multer");
 const auth    = require("../middleware/auth");
-const { transcribe, getContext, startChat, reply, replyText } = require("../controllers/chatController");
+const { transcribe, getContext, startChat, reply, replyText, getBurnoutStatus } = require("../controllers/chatController");
 
-// Multer config — saves audio to temp uploads/ folder
+/**
+ * Multer Storage Configuration
+ * Temporarily persists uploaded audio buffers for Whisper transcription.
+ */
 const storage = multer.diskStorage({
   destination: "uploads/",
   filename: (req, file, cb) => {
@@ -13,22 +27,39 @@ const storage = multer.diskStorage({
 });
 const upload = multer({ storage });
 
-// POST /api/chat/start
-// Start a new check-in session → returns AI greeting
+/**
+ * @route POST /api/chat/start
+ * @desc Initialize a new AI check-in session
+ * @access Private
+ */
 router.post("/start", auth, startChat);
 
-// POST /api/chat/reply
-// Send voice reply → transcribe → sentiment → AI follow-up → advance flow
+/**
+ * @route POST /api/chat/reply
+ * @desc Submit an audio reply for transcription and AI processing
+ * @access Private
+ */
 router.post("/reply", auth, upload.single("audio"), reply);
 
-// POST /api/chat/reply-text
-// Send text reply (for testing without mic) → sentiment → AI follow-up
+/**
+ * @route POST /api/chat/reply-text
+ * @desc Submit a text reply for AI processing (debug/fallback)
+ * @access Private
+ */
 router.post("/reply-text", auth, replyText);
 
-// POST /api/chat/transcribe (legacy)
-router.post("/transcribe", auth, upload.single("audio"), transcribe);
-
-// GET /api/chat/context
+/**
+ * @route GET /api/chat/context
+ * @desc Fetch environmental context (weather/traffic) for a location
+ * @access Private
+ */
 router.get("/context", auth, getContext);
+
+/**
+ * @route GET /api/chat/burnout
+ * @desc Fetch the exact burnout history state of user
+ * @access Private
+ */
+router.get("/burnout", auth, getBurnoutStatus);
 
 module.exports = router;

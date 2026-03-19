@@ -1,18 +1,41 @@
+/**
+ * @fileoverview Conversation Model for managing AI-driven check-in sessions.
+ * Implements a state-machine like structure to track the progress of conversational data extraction.
+ * 
+ * @module server/models/Conversation
+ * @requires mongoose
+ */
+
 const mongoose = require("mongoose");
 
-// Each message in a conversation turn
+/**
+ * Message Schema (Embedded)
+ * Represents a single exchange in the conversation.
+ */
 const messageSchema = new mongoose.Schema({
   role:      { type: String, enum: ["user", "assistant"], required: true },
   text:      { type: String, required: true },
+  /**
+   * AI-Generated Sentiment Analysis
+   * Captured in-realtime during the conversation turn.
+   */
   sentiment: {
-    mood:       String,   // "happy", "stressed", "tired", etc.
-    score:      Number,   // -1.0 to 1.0
-    summary:    String,
-    suggestion: String,
+    mood:       String,   // e.g., "happy", "stressed", "tired"
+    score:      Number,   // Normalized score from -1.0 to 1.0
+    summary:    String,   // NLP summary of the user's emotional state
+    suggestion: String,   // AI-provided tip based on current mood
   },
 }, { timestamps: true });
 
-// One conversation per user per check-in session
+/**
+ * Conversation Schema
+ * 
+ * @typedef {Object} Conversation
+ * @property {mongoose.Schema.Types.ObjectId} userId - Reference to the User participant.
+ * @property {string} step - Current state in the check-in workflow.
+ * @property {Object} extractedData - Structured data harvested from the natural language exchange.
+ * @property {Array} messages - Ordered history of the conversation turns.
+ */
 const conversationSchema = new mongoose.Schema({
   userId: {
     type: mongoose.Schema.Types.ObjectId,
@@ -20,17 +43,33 @@ const conversationSchema = new mongoose.Schema({
     required: true,
     index: true,
   },
-  // Tracks where the user is in the structured check-in flow
+  /**
+   * Workflow State Machine
+   * Defines the progression of the structured check-in.
+   */
   step: {
     type: String,
     enum: ["greeting", "mood", "platform", "earnings", "hours", "summary", "done"],
     default: "greeting",
   },
-  // Structured data extracted from user replies during the flow
+  /**
+   * Extracted Domain Data
+   * Accumulates structured values (e.g., amount, hours) as they are identified by the LLM.
+   */
   extractedData: {
-    platform: String,     // "uber", "swiggy", "rapido"
-    earnings: Number,     // e.g. 1200
-    hours:    Number,     // e.g. 5
+    platform: String,     // e.g., "uber", "swiggy"
+    earnings: Number,     // e.g., 1200
+    hours:    Number,     // e.g., 5
+  },
+  /**
+   * Burnout Assessment
+   * Calculated automatically when the check-in conversation is completed.
+   */
+  burnoutStatus: {
+    isBurnoutAlert:  Boolean,
+    isStressWarning: Boolean,
+    averageScore:    Number,
+    action:          String,
   },
   messages: [messageSchema],
 }, { timestamps: true });

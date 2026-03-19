@@ -1,6 +1,17 @@
+/**
+ * @fileoverview User Dashboard Page.
+ * The central hub of the GigOne experience, featuring the Gigi AI conversational 
+ * companion, real-time weather/traffic integration, and earnings overview.
+ * 
+ * @module client/pages/user/DashBoard
+ * @requires react
+ * @requires react-router-dom
+ * @requires ../../hooks/useVoiceRecorder
+ * @requires ../../services/chatApi
+ */
+
 import { Button } from "@/components/ui/button";
 import { Link } from "react-router-dom";
-
 import {
   Card,
   CardContent,
@@ -13,11 +24,20 @@ import { useNavigate } from "react-router-dom";
 import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import { chatApi } from "../../services/chatApi";
 
+/**
+ * UserDashBoard Component
+ * 
+ * Orchestrates multimodal AI interaction, live clock, geolocation-based 
+ * context fetching, and historical work/earnings summaries.
+ * 
+ * @component DashBoard
+ * @returns {JSX.Element}
+ */
 export default function DashBoard() {
   const [time, setTime] = useState("");
   const navigate = useNavigate();
 
-  // Chat state
+  // Conversational State
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder();
   const [conversationId, setConversationId] = useState(null);
   const [messages, setMessages] = useState([
@@ -29,22 +49,29 @@ export default function DashBoard() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [location, setLocation] = useState({ lat: null, lon: null });
   const [weatherData, setWeatherData] = useState(null);
+  const [burnoutStatus, setBurnoutStatus] = useState(null);
   const chatEndRef = useRef(null);
-  const currentAudioRef = useRef(null); // Track current playing audio for cleanup
+  const currentAudioRef = useRef(null); 
 
-  // 🔊 Pre-fetch audio blob from Edge TTS (returns blob, doesn't play yet)
+  /**
+   * Fetches an audio blob from the TTS service for the given text.
+   * @private
+   */
   const fetchVoice = async (text) => {
     try {
       return await chatApi.synthesizeSpeech(text);
     } catch (err) {
-      console.warn("Edge TTS fetch failed:", err.message);
+      console.warn("Edge TTS pre-fetch failed:", err.message);
       return null;
     }
   };
 
-  // Play audio blob (or fallback to browser TTS)
+  /**
+   * Plays the provided audio blob or falls back to native Web Speech API.
+   * @private
+   */
   const playAudio = (audioBlob, text) => {
-    // Stop any currently playing audio
+    // Immediate stop of concurrent audio tasks
     if (currentAudioRef.current) {
       currentAudioRef.current.pause();
       currentAudioRef.current = null;
@@ -61,91 +88,79 @@ export default function DashBoard() {
       };
       audio.play();
     } else if ("speechSynthesis" in window) {
-      // Fallback to browser TTS
       const utterance = new SpeechSynthesisUtterance(text);
       const voices = window.speechSynthesis.getVoices();
-      const indianVoice = voices.find(
-        (v) => v.lang.includes("hi-IN") || v.lang.includes("en-IN"),
-      );
+      const indianVoice = voices.find((v) => v.lang.includes("hi-IN") || v.lang.includes("en-IN"));
       if (indianVoice) utterance.voice = indianVoice;
       utterance.rate = 1.1;
       window.speechSynthesis.speak(utterance);
     }
   };
 
-  // Initialize chat session (called manually)
+  /**
+   * Manual session initializer.
+   * @private
+   */
   const initChat = async () => {
     try {
       setIsProcessing(true);
       const data = await chatApi.startSession();
       setConversationId(data.conversationId);
-
-      // Show text immediately, play voice in background (non-blocking)
       setMessages([{ role: "assistant", text: data.reply }]);
       fetchVoice(data.reply).then((blob) => playAudio(blob, data.reply));
     } catch (err) {
-      console.error("Failed to start chat session", err);
+      console.error("Session initialization failure:", err);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Auto-scroll chat to bottom when messages change
+  /**
+   * Dynamic auto-scroll to latest message.
+   */
   useEffect(() => {
     chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages]);
+
+  /**
+   * Component Mounting Logic: Auth persistence, clock initiation, and geolocation.
+   */
   useEffect(() => {
-    // 1. Check if we just arrived from Google Auth
     const urlParams = new URLSearchParams(window.location.search);
     const token = urlParams.get("token");
     const user = urlParams.get("user");
 
+    // Persistence layer for Google OAuth redirects
     if (token && user) {
-      // Save Google Auth token + user to local storage and clean the URL
       localStorage.setItem("token", token);
       localStorage.setItem("user", user);
-
-      // Remove query string from URL so it doesn't stay there on reload
       window.history.replaceState({}, document.title, "/user/dashboard");
     }
 
-    // 2. Start the live clock
     const tick = () => {
       const now = new Date();
-      setTime(
-        now.toLocaleTimeString("en-IN", {
-          hour: "2-digit",
-          minute: "2-digit",
-          hour12: false,
-        }),
-      );
+      setTime(now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false }));
     };
 
-    // 4. Get User Location for Weather Context
+    // Parallel fetch for non-location dependent data
+    chatApi.getBurnoutStatus()
+      .then(setBurnoutStatus)
+      .catch(err => console.warn("Failed fetching burnout status:", err));
+
+    // Context Gathering: Location-aware services
     if ("geolocation" in navigator) {
       navigator.geolocation.getCurrentPosition(
         async (position) => {
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
+          const { latitude: lat, longitude: lon } = position.coords;
           setLocation({ lat, lon });
-
-          // Fetch live weather context to display in the UI
           try {
             const contextData = await chatApi.getContext(lat, lon);
-            if (
-              contextData &&
-              contextData.weather &&
-              contextData.weather.current
-            ) {
-              setWeatherData(contextData.weather.current);
-            }
+            if (contextData?.weather?.current) setWeatherData(contextData.weather.current);
           } catch (err) {
-            console.error("Failed to fetch weather context:", err);
+            console.error("Context fetch failed:", err);
           }
         },
-        (error) => {
-          console.warn("Geolocation denied or failed:", error.message);
-        },
+        (error) => console.warn("Geolocation access denied:", error.message),
       );
     }
 
@@ -155,26 +170,30 @@ export default function DashBoard() {
 
   const recordingStartTimeRef = useRef(0);
 
+  /**
+   * Recording Start Handler
+   */
   const handleMicDown = () => {
     if (!conversationId) {
       initChat();
       return;
     }
-
     if (!isProcessing) {
       recordingStartTimeRef.current = Date.now();
       startRecording();
     }
   };
 
+  /**
+   * Recording Stop & Submission Handler
+   */
   const handleMicUp = async () => {
     if (!isRecording) return;
 
-    // Require at least 400ms hold to count as a real recording
+    // Minimum hold threshold to filter accidental taps
     const duration = Date.now() - recordingStartTimeRef.current;
     if (duration < 400) {
-      console.log("Tap too short, ignoring...");
-      await stopRecording(); // stop but don't send
+      await stopRecording();
       return;
     }
 
@@ -182,31 +201,21 @@ export default function DashBoard() {
       setIsProcessing(true);
       const audioBlob = await stopRecording();
 
-      // UX loading state
-      setMessages((prev) => [
-        ...prev,
-        { role: "user", text: "🎙️ (Sending audio...)" },
-      ]);
+      setMessages((prev) => [...prev, { role: "user", text: "🎙️ (Processing voice...)" }]);
 
-      const data = await chatApi.sendAudioReply(
-        audioBlob,
-        conversationId,
-        location.lat,
-        location.lon,
-      );
+      const data = await chatApi.sendAudioReply(audioBlob, conversationId, location.lat, location.lon);
 
-      // Show text immediately, play voice in background (non-blocking)
+      if (data.burnoutStatus) {
+        setBurnoutStatus(data.burnoutStatus);
+      }
+
       setMessages((prev) => {
-        const newMsgs = prev.slice(0, -1); // remove loading bubble
-        return [
-          ...newMsgs,
-          { role: "user", text: data.transcription },
-          { role: "assistant", text: data.reply },
-        ];
+        const newMsgs = prev.slice(0, -1);
+        return [...newMsgs, { role: "user", text: data.transcription }, { role: "assistant", text: data.reply }];
       });
       fetchVoice(data.reply).then((blob) => playAudio(blob, data.reply));
     } catch (err) {
-      console.error("Error sending voice reply:", err);
+      console.error("Voice interaction error:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -214,259 +223,112 @@ export default function DashBoard() {
 
   return (
     <div className="dashboard-page">
-      {/* sidebar */}
+      {/* Sidebar Navigation */}
       <aside className="dashboard-sidebar">
-        {/* logo */}
-        <div className="dashboard-logo">🔷 Dashboard</div>
-
-        {/* Main section  */}
+        <div className="dashboard-logo">🔷 Project</div>
         <span className="sidebar-section-label">Main</span>
-        <button
-          className="sidebar-link active"
-          onClick={() => navigate("/user/dashboard")}
-        >
-          🏠 Dashboard
-        </button>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/earnings")}
-        >
-          💰 Earnings
-        </button>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/work-logs")}
-        >
-          📋 Work Logs
-        </button>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/suggestions")}
-        >
-          💡 Suggestions
-        </button>
-
-        {/* INSIGHTS section */}
+        <button className="sidebar-link active" onClick={() => navigate("/user/dashboard")}>🏠 Dashboard</button>
+        <button className="sidebar-link" onClick={() => navigate("/user/earnings")}>💰 Earnings</button>
+        <button className="sidebar-link" onClick={() => navigate("/user/work-logs")}>📋 Work Logs</button>
+        <button className="sidebar-link" onClick={() => navigate("/user/suggestions")}>💡 Suggestions</button>
         <span className="sidebar-section-label">Insights</span>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/weekly-report")}
-        >
-          📊 Weekly Report
-        </button>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/platforms")}
-        >
-          🔗 Platforms
-        </button>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/shift-planner")}
-        >
-          🕐 Shift Planner
-        </button>
-
-        {/* ALERTS section */}
+        <button className="sidebar-link" onClick={() => navigate("/user/weekly-report")}>📊 Weekly Report</button>
+        <button className="sidebar-link" onClick={() => navigate("/user/platforms")}>🔗 Platforms</button>
+        <button className="sidebar-link" onClick={() => navigate("/user/shift-planner")}>🕐 Shift Planner</button>
         <span className="sidebar-section-label">Alerts</span>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/nudges")}
-        >
-          🔔 Nudges
-        </button>
-        <button
-          className="sidebar-link"
-          onClick={() => navigate("/user/settings")}
-        >
-          ⚙️ Settings
-        </button>
+        <button className="sidebar-link" onClick={() => navigate("/user/settings")}>⚙️ Settings</button>
       </aside>
-      {/* main content */}
+
       <div className="dashboard-main">
-        {/* topbar */}
+        {/* Top Operational Bar */}
         <header className="dashboard-topbar">
-          {/* Status badges on the left side */}
-          <span className="topbar-badge active">🟢 AI Active</span>
+          <span className="topbar-badge active">🟢 Chatbot Online</span>
           {weatherData ? (
             <>
-              <span className="topbar-badge">
-                {weatherData.condition === "Rain" ? "🌧" : "🌤"}{" "}
-                {Math.round(weatherData.temp)}°C · Surge Detected
-              </span>
-              <span className="topbar-badge">📍 {weatherData.city}</span>
+              <span className="topbar-badge">{weatherData.condition === "Rain" ? "🌧" : "🌤"} {Math.round(weatherData.temp)}°C · {weatherData.city}</span>
             </>
           ) : (
-            <>
-              <span className="topbar-badge">
-                🌧 Rain 5 PM · Surge Detected
-              </span>
-              <span className="topbar-badge">📍 Bangalore</span>
-            </>
+            <span className="topbar-badge">📍 Fetching context...</span>
           )}
-          {/* Live clock on the far right */}
           <span className="topbar-clock">{time}</span>
         </header>
 
-        {/* center row */}
         <div className="dashboard-center">
+          {/* AI Interface Panel */}
           <section className="ai-avatar">
-            {/* Status chip top-right */}
             <span className="ai-status-chip">
-              {isProcessing
-                ? "⏳ Thinking..."
-                : isRecording
-                  ? "🔴 Recording..."
-                  : "🎙 Listening · AI is Ready"}
+              {isProcessing ? "⏳ Thinking..." : isRecording ? "🔴 Recording..." : "🎙 Listening"}
             </span>
-            {/* Avatar circle — AI companion image */}
             <div className="ai-avatar-circle">
-              <img
-                src="/gigi-avatar.png"
-                alt="AI Companion"
-                style={{
-                  width: "100%",
-                  height: "100%",
-                  objectFit: "cover",
-                  borderRadius: "50%",
-                }}
-              />
+              <img src="/gigi-avatar.png" alt="Chatbot AI" style={{ width: "100%", height: "100%", borderRadius: "50%" }} />
             </div>
-            {/* Name + tagline */}
-            <h2 className="ai-name">AI Companion</h2>
-            <p className="ai-tagline">
-              Your AI Gig Companion · Always Listening
-            </p>
-            {/* Speech bubble */}
+            <h2 className="ai-name">Chatbot</h2>
+            <p className="ai-tagline">Your Gig Companion</p>
             <div className="ai-chat-box">
               {messages.map((msg, index) => (
-                <div
-                  key={index}
-                  className="ai-bubble"
-                  style={{
-                    backgroundColor:
-                      msg.role === "user"
-                        ? "rgba(0, 212, 170, 0.1)"
-                        : "rgba(108, 99, 255, 0.1)",
-                    border:
-                      msg.role === "user"
-                        ? "1px solid rgba(0, 212, 170, 0.2)"
-                        : "1px solid rgba(108, 99, 255, 0.2)",
-                    alignSelf: msg.role === "user" ? "flex-end" : "flex-start",
-                    textAlign: msg.role === "user" ? "right" : "left",
-                  }}
-                >
-                  <p
-                    className="ai-bubble-label"
-                    style={{
-                      color:
-                        msg.role === "user"
-                          ? "var(--color-accent)"
-                          : "var(--color-primary)",
-                      textAlign: msg.role === "user" ? "right" : "left",
-                    }}
-                  >
-                    {msg.role === "user" ? "You" : "AI"}
+                <div key={index} className="ai-bubble" style={{ alignSelf: msg.role === "user" ? "flex-end" : "flex-start" }}>
+                  <p className="ai-bubble-label" style={{ color: msg.role === "user" ? "var(--color-accent)" : "var(--color-primary)" }}>
+                    {msg.role === "user" ? "You" : "Chatbot"}
                   </p>
                   <p style={{ margin: 0 }}>{msg.text}</p>
                 </div>
               ))}
-              {/* Invisible ref element to force scroll to bottom */}
               <div ref={chatEndRef} />
             </div>
-            {/* Mic button */}
             <button
               className={`ai-mic-btn ${isRecording ? "recording" : ""}`}
               onMouseDown={handleMicDown}
               onMouseUp={handleMicUp}
-              onMouseLeave={handleMicUp} // stop if they drag off the button
-              onTouchStart={(e) => {
-                e.preventDefault(); // prevent triggering mousedown
-                handleMicDown();
-              }}
-              onTouchEnd={(e) => {
-                e.preventDefault(); // prevent triggering mouseup
-                handleMicUp();
-              }}
+              onMouseLeave={handleMicUp}
+              onTouchStart={(e) => { e.preventDefault(); handleMicDown(); }}
+              onTouchEnd={(e) => { e.preventDefault(); handleMicUp(); }}
               disabled={isProcessing}
-              style={{ backgroundColor: isRecording ? "#ff4b4b" : "" }}
-            >
-              🎤
-            </button>
-            <span className="ai-mic-label">
-              {isProcessing
-                ? "Processing..."
-                : isRecording
-                  ? "Recording... Release to send"
-                  : "Hold to speak"}
-            </span>
+            >🎤</button>
+            <span className="ai-mic-label">{isProcessing ? "Thinking..." : isRecording ? "Release to send" : "Hold to speak"}</span>
           </section>
 
+          {/* Performance Overview Panel */}
           <section className="overview-panel">
-            {/* Header */}
-            <div>
-              <h2 className="overview-title">
-                Today's
-                <br />
-                Overview
-              </h2>
-              <p className="overview-date">TUE · FEB 18 · 2026</p>
-            </div>
+            <h2 className="overview-title">Today's Overview</h2>
 
-            {/* Earnings card */}
-            <div className="earnings-card">
-              <p className="earnings-card-label">Today's Earnings</p>
+            {/* Burnout Risk Widget */}
+            <div className="earnings-card" style={{ 
+              marginBottom: '1.5rem', 
+              borderLeft: burnoutStatus?.isBurnoutAlert ? '4px solid #ff4d4f' : burnoutStatus?.isStressWarning ? '4px solid #faad14' : '4px solid var(--color-accent)' 
+            }}>
+              <p className="earnings-card-label">Mental Fatigue Risk</p>
               <p>
-                This Week &nbsp;
-                <span className="earnings-amount">₹5,800 total</span>
+                <span className="earnings-amount" style={{ 
+                  fontSize: '1.3rem', 
+                  color: burnoutStatus?.isBurnoutAlert ? '#ff4d4f' : burnoutStatus?.isStressWarning ? '#faad14' : 'var(--color-accent)' 
+                }}>
+                  {burnoutStatus ? burnoutStatus.action : "Analyzing History..."}
+                </span>
               </p>
+              {burnoutStatus && (
+                <p style={{ fontSize: '0.85rem', color: 'rgba(255,255,255,0.6)', marginTop: '0.5rem', marginBottom: 0 }}>
+                  5-Day Mood Trend: {burnoutStatus.averageScore > 0 ? '+' : ''}{burnoutStatus.averageScore}
+                </p>
+              )}
+            </div>
 
-              {/* CSS bar chart */}
+            <div className="earnings-card">
+              <p className="earnings-card-label">Current Progress</p>
+              <p><span className="earnings-amount">₹5,800 this week</span></p>
               <div className="bar-chart">
-                <div className="bar" style={{ height: "40%" }}></div>
-                <div className="bar" style={{ height: "60%" }}></div>
-                <div className="bar active" style={{ height: "80%" }}></div>
-                <div className="bar" style={{ height: "50%" }}></div>
-                <div className="bar active" style={{ height: "90%" }}></div>
-                <div className="bar" style={{ height: "70%" }}></div>
-                <div className="bar" style={{ height: "55%" }}></div>
-              </div>
-              <div className="bar-labels">
-                <span className="bar-label">M</span>
-                <span className="bar-label">T</span>
-                <span className="bar-label">W</span>
-                <span className="bar-label">T</span>
-                <span className="bar-label">F</span>
-                <span className="bar-label">S</span>
-                <span className="bar-label">S</span>
+                {[40, 60, 80, 50, 90, 70, 55].map((h, i) => (
+                   <div key={i} className={`bar ${h > 75 ? 'active' : ''}`} style={{ height: `${h}%` }}></div>
+                ))}
               </div>
             </div>
-
-            {/* Recent Work Logs */}
-            <div>
-              <div className="work-logs-header">
-                <span>Recent Work Logs</span>
-                <a className="work-logs-view-all">View all →</a>
-              </div>
-
-              <div className="work-log-item">
-                <span className="work-log-platform">Uber</span>
-                <span className="work-log-meta">Today · 5 hrs · ₹1,200</span>
-              </div>
-              <div className="work-log-item">
-                <span className="work-log-platform">Swiggy</span>
-                <span className="work-log-meta">Mon · 4 hrs · ₹800</span>
-              </div>
-              <div className="work-log-item">
-                <span className="work-log-platform">Rapido</span>
-                <span className="work-log-meta">Sun · 3 hrs · ₹600</span>
-              </div>
-            </div>
-
-            {/* What To Do Tomorrow */}
-            <div className="tomorrow-header">
-              <span>What To Do Tomorrow</span>
-              <span className="ai-suggestion-badge">✨ AI Suggestion</span>
+            <div className="work-logs-summary">
+              <div className="work-logs-header"><span>Recent Shifts</span></div>
+              {['Uber', 'Swiggy', 'Rapido'].map((p, i) => (
+                <div key={i} className="work-log-item">
+                  <span className="work-log-platform">{p}</span>
+                  <span className="work-log-meta">Recent · {5-i} hrs · ₹{1200 - (i*200)}</span>
+                </div>
+              ))}
             </div>
           </section>
         </div>

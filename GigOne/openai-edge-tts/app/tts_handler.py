@@ -1,4 +1,9 @@
-# tts_handler.py
+"""
+Core TTS generation and audio processing logic.
+
+This module handles the interaction with the edge-tts library, manages voice
+mappings, and performs audio format conversion using FFmpeg.
+"""
 
 import edge_tts
 import asyncio
@@ -35,7 +40,12 @@ model_data = [
     ]
 
 def is_ffmpeg_installed():
-    """Check if FFmpeg is installed and accessible."""
+    """
+    Checks if FFmpeg is installed and accessible in the system path.
+
+    Returns:
+        bool: True if FFmpeg is available, False otherwise.
+    """
     try:
         subprocess.run(['ffmpeg', '-version'], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
         return True
@@ -43,7 +53,17 @@ def is_ffmpeg_installed():
         return False
 
 async def _generate_audio_stream(text, voice, speed):
-    """Generate streaming TTS audio using edge-tts."""
+    """
+    Generates a stream of audio chunks using edge-tts.
+
+    Args:
+        text (str): The text to convert to speech.
+        voice (str): The voice name or OpenAI-compatible voice alias.
+        speed (float): The playback speed multiplier.
+
+    Yields:
+        bytes: Raw audio data chunks.
+    """
     # Determine if the voice is an OpenAI-compatible voice or a direct edge-tts voice
     edge_tts_voice = voice_mapping.get(voice, voice)  # Use mapping if in OpenAI names, otherwise use as-is
     
@@ -63,11 +83,32 @@ async def _generate_audio_stream(text, voice, speed):
             yield chunk["data"]
 
 def generate_speech_stream(text, voice, speed=1.0):
-    """Generate streaming speech audio (synchronous wrapper)."""
+    """
+    Synchronous wrapper for _generate_audio_stream.
+
+    Args:
+        text (str): The text to convert to speech.
+        voice (str): The voice name.
+        speed (float): The playback speed multiplier.
+
+    Returns:
+        generator: A generator yielding audio data chunks.
+    """
     return asyncio.run(_generate_audio_stream(text, voice, speed))
 
 async def _generate_audio(text, voice, response_format, speed):
-    """Generate TTS audio and optionally convert to a different format."""
+    """
+    Generates TTS audio and optionally converts it to the requested format.
+
+    Args:
+        text (str): The text to convert to speech.
+        voice (str): The voice name.
+        response_format (str): The desired output format (e.g., 'mp3', 'wav').
+        speed (float): The playback speed multiplier.
+
+    Returns:
+        str: The file path to the generated audio file.
+    """
     # Determine if the voice is an OpenAI-compatible voice or a direct edge-tts voice
     edge_tts_voice = voice_mapping.get(voice, voice)  # Use mapping if in OpenAI names, otherwise use as-is
 
@@ -152,18 +193,57 @@ async def _generate_audio(text, voice, response_format, speed):
     return converted_path
 
 def generate_speech(text, voice, response_format, speed=1.0):
+    """
+    Synchronous wrapper for _generate_audio.
+
+    Args:
+        text (str): The text to convert to speech.
+        voice (str): The voice name.
+        response_format (str): The desired output format.
+        speed (float): The playback speed multiplier.
+
+    Returns:
+        str: The file path to the generated audio file.
+    """
     return asyncio.run(_generate_audio(text, voice, response_format, speed))
 
 def get_models():
+    """
+    Returns the list of available TTS models.
+
+    Returns:
+        list: A list of model metadata dictionaries.
+    """
     return model_data
 
 def get_models_formatted():
+    """
+    Returns the list of available models formatted for OpenAI compatibility.
+
+    Returns:
+        list: A list of dictionaries containing model IDs.
+    """
     return [{ "id": x["id"] } for x in model_data]
 
 def get_voices_formatted():
+    """
+    Returns the list of available voices formatted for OpenAI compatibility.
+
+    Returns:
+        list: A list of dictionaries containing voice IDs and names.
+    """
     return [{ "id": k, "name": v } for k, v in voice_mapping.items()]
 
 async def _get_voices(language=None):
+    """
+    Retrieves the list of available voices from edge-tts, optionally filtered by language.
+
+    Args:
+        language (str, optional): The language locale to filter by (e.g., 'en-US').
+
+    Returns:
+        list: A list of voice metadata dictionaries.
+    """
     # List all voices, filter by language if specified
     all_voices = await edge_tts.list_voices()
     language = language or DEFAULT_LANGUAGE  # Use default if no language specified
@@ -174,6 +254,15 @@ async def _get_voices(language=None):
     return filtered_voices
 
 def get_voices(language=None):
+    """
+    Synchronous wrapper for _get_voices.
+
+    Args:
+        language (str, optional): The language locale to filter by.
+
+    Returns:
+        list: A list of voice metadata dictionaries.
+    """
     return asyncio.run(_get_voices(language))
 
 def speed_to_rate(speed: float) -> str:

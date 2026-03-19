@@ -1,0 +1,47 @@
+site_name: Project Documentation
+site_description: Documentation for Project - AI Companion for Gig Workers
+theme:
+  name: material
+  features:
+    - navigation.tabs
+    - navigation.sections
+    - toc.integrate
+  palette:
+    - scheme: default
+      primary: indigo
+      accent: teal
+    - scheme: slate
+      primary: indigo
+      accent: teal
+      toggle:
+        icon: material/brightness-4
+        name: Switch to dark mode
+
+markdown_extensions:
+  - pymdownx.superfences:
+      custom_fences:
+        - name: mermaid
+          class: mermaid
+          format: !!python/name:pymdownx.superfences.fence_code_format
+
+nav:
+  - Home: index.md
+  - Architecture:
+    - System Overview: architecture/overview.md
+    - Tech Stack: architecture/stack.md
+  - Server API:
+    - Overview: server/index.md
+    - Authentication: server/auth.md
+    - Chat & AI: server/chat.md
+    - Earnings & WorkLogs: server/data.md
+    - Services: server/services.md
+  - Client App:
+    - Overview: client/index.md
+    - Components: client/components.md
+    - Pages: client/pages.md
+    - Hooks & Utilities: client/hooks.md
+  - Development:
+    - Setup Guide: dev/setup.md
+    - Testing: dev/testing.md
+  - Voice Module: voice-module.md
+  - Burnout Module: burnout-module.md

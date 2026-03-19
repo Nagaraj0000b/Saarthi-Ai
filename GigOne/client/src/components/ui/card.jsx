@@ -1,6 +1,19 @@
+/**
+ * @fileoverview Card component suite for structured content containers.
+ * Implements a modular approach with Header, Content, and Footer sub-components.
+ * 
+ * @module client/components/ui/card
+ * @requires react
+ * @requires @/lib/utils
+ */
+
 import * as React from "react"
 import { cn } from "@/lib/utils"
 
+/**
+ * Main Card Container
+ * @component Card
+ */
 function Card({ className, ...props }) {
   return (
     <div
@@ -11,6 +24,10 @@ function Card({ className, ...props }) {
   );
 }
 
+/**
+ * Card Header section
+ * @component CardHeader
+ */
 function CardHeader({ className, ...props }) {
   return (
     <div
@@ -21,6 +38,10 @@ function CardHeader({ className, ...props }) {
   );
 }
 
+/**
+ * Card Title
+ * @component CardTitle
+ */
 function CardTitle({ className, ...props }) {
   return (
     <div
@@ -31,6 +52,10 @@ function CardTitle({ className, ...props }) {
   );
 }
 
+/**
+ * Card Description
+ * @component CardDescription
+ */
 function CardDescription({ className, ...props }) {
   return (
     <div
@@ -41,6 +66,10 @@ function CardDescription({ className, ...props }) {
   );
 }
 
+/**
+ * Card Action area
+ * @component CardAction
+ */
 function CardAction({ className, ...props }) {
   return (
     <div
@@ -51,6 +80,10 @@ function CardAction({ className, ...props }) {
   );
 }
 
+/**
+ * Card Body Content
+ * @component CardContent
+ */
 function CardContent({ className, ...props }) {
   return (
     <div
@@ -61,6 +94,10 @@ function CardContent({ className, ...props }) {
   );
 }
 
+/**
+ * Card Footer section
+ * @component CardFooter
+ */
 function CardFooter({ className, ...props }) {
   return (
     <div

@@ -1,36 +1,57 @@
+/**
+ * @fileoverview Authentication Controller managing user registration and login workflows.
+ * Implements local authentication using Bcrypt for hashing and JWT for session-less authorization.
+ * 
+ * @module server/controllers/authController
+ * @requires bcryptjs
+ * @requires jsonwebtoken
+ * @requires ../models/User
+ */
+
 const bcrypt = require("bcryptjs");
 const jwt    = require("jsonwebtoken");
 const User   = require("../models/User");
 
-// Helper: generate JWT
+/**
+ * Generates a signed JSON Web Token for the provided user.
+ * 
+ * @private
+ * @function generateToken
+ * @param {Object} user - The User document from MongoDB.
+ * @returns {string} Signed JWT.
+ */
 const generateToken = (user) => {
-  // Contains the user's ID and role inside it
-  // Expires in 7 days
-  // Is signed with your secret key so it can't be faked
   return jwt.sign(
-    { userId: user._id, role: user.role }, // payload inside the token
-    process.env.JWT_SECRET,                // secret key from .env
+    { userId: user._id, role: user.role }, 
+    process.env.JWT_SECRET,
     { expiresIn: "7d" }
   );
 };
 
-// POST /api/auth/register
+/**
+ * Registers a new user in the system.
+ * Performs JIT password hashing and ensures email uniqueness.
+ * 
+ * @async
+ * @function register
+ * @param {Object} req - Express request object.
+ * @param {string} req.body.name - Full name of the user.
+ * @param {string} req.body.email - Unique email address.
+ * @param {string} req.body.password - Plain-text password to be hashed.
+ * @param {Object} res - Express response object.
+ * @returns {Promise<void>}
+ */
 const register = async (req, res) => {
-  // 1. Check if email already exists → if yes, block it
-  // 2. Hash the password (bcrypt turns "1234" into a scrambled string)
-  // 3. Save the new user to MongoDB
-  // 4. Return a token + basic user info
-
-  const { name, email, password } = req.body; // get data from request
+  const { name, email, password } = req.body;
   try {
-    const exists = await User.findOne({ email }); // check DB for existing email
+    const exists = await User.findOne({ email });
     if (exists) return res.status(400).json({ message: "Email already registered" });
 
-    const passwordHash = await bcrypt.hash(password, 10); // 10 = salt rounds (security level)
-    const user = await User.create({ name, email, passwordHash }); // save to DB
+    const passwordHash = await bcrypt.hash(password, 10);
+    const user = await User.create({ name, email, passwordHash });
 
     res.status(201).json({
-      token: generateToken(user), // send token back to frontend
+      token: generateToken(user),
       user: { id: user._id, name: user.name, role: user.role },
     });
   } catch (err) {
@@ -38,27 +59,34 @@ const register = async (req, res) => {
   }
 };
 
-// POST /api/auth/login
+/**
+ * Authenticates an existing user.
+ * Validates credentials and returns a fresh JWT if successful.
+ * 
+ * @async
+ * @function login
+ * @param {Object} req - Express request object.
+ * @param {string} req.body.email - Registered email address.
+ * @param {string} req.body.password - Plain-text password.
+ * @param {Object} res - Express response object.
+ * @returns {Promise<void>}
+ */
 const login = async (req, res) => {
-  // 1. Find user by email → if not found, block it
-  // 2. Compare entered password with stored hash
-  // 3. If it matches → return a fresh token + user info
-
   const { email, password } = req.body;
   try {
-    const user = await User.findOne({ email }); // look up user in DB
+    const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ message: "User not found" });
 
-    // Handle legacy users that don't have passwordHash
-    if (!user.passwordHash) {
-      return res.status(400).json({ message: "Legacy account structure detected. Please sign up again." });
+    // Handle accounts provisioned via Google OAuth that lack a local password
+    if (!user.passwordHash || user.passwordHash === "google_oauth_no_password") {
+      return res.status(400).json({ message: "OAuth account detected. Please use Google Login." });
     }
 
-    const valid = await bcrypt.compare(password, user.passwordHash); // compare plain vs hashed
-    if (!valid) return res.status(400).json({ message: "Wrong password" });
+    const valid = await bcrypt.compare(password, user.passwordHash);
+    if (!valid) return res.status(400).json({ message: "Invalid credentials" });
 
     res.json({
-      token: generateToken(user), // send fresh token
+      token: generateToken(user),
       user: { id: user._id, name: user.name, role: user.role },
     });
   } catch (err) {
@@ -66,4 +94,4 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { register, login }; // expose both functions to routes
+module.exports = { register, login };

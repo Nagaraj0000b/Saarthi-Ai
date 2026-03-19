@@ -1,7 +1,21 @@
+/**
+ * @fileoverview Tabs component for compartmentalized content navigation.
+ * Built on Radix UI Tabs primitive to ensure keyboard accessibility and WAI-ARIA compliance.
+ * 
+ * @module client/components/ui/tabs
+ * @requires react
+ * @requires radix-ui
+ * @requires @/lib/utils
+ */
+
 import * as React from "react"
 import { Tabs as TabsPrimitive } from "radix-ui"
 import { cn } from "@/lib/utils"
 
+/**
+ * Main Tabs Root Container
+ * @component Tabs
+ */
 function Tabs({ className, ...props }) {
   return (
     <TabsPrimitive.Root
@@ -12,6 +26,10 @@ function Tabs({ className, ...props }) {
   );
 }
 
+/**
+ * List container for Tab triggers
+ * @component TabsList
+ */
 function TabsList({ className, ...props }) {
   return (
     <TabsPrimitive.List
@@ -22,6 +40,10 @@ function TabsList({ className, ...props }) {
   );
 }
 
+/**
+ * Individual Tab trigger button
+ * @component TabsTrigger
+ */
 function TabsTrigger({ className, ...props }) {
   return (
     <TabsPrimitive.Trigger
@@ -32,6 +54,10 @@ function TabsTrigger({ className, ...props }) {
   );
 }
 
+/**
+ * Tab Content panel
+ * @component TabsContent
+ */
 function TabsContent({ className, ...props }) {
   return (
     <TabsPrimitive.Content

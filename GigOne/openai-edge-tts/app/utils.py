@@ -1,4 +1,9 @@
-# utils.py
+"""
+Utility functions and shared constants for the TTS server.
+
+Includes helper functions for environment variable parsing, API key
+authentication middleware, and audio format MIME type mappings.
+"""
 
 from flask import request, jsonify
 from functools import wraps
@@ -10,6 +15,16 @@ from config import DEFAULT_CONFIGS
 load_dotenv()
 
 def getenv_bool(name: str, default: bool = False) -> bool:
+    """
+    Retrieves an environment variable and converts it to a boolean.
+
+    Args:
+        name (str): The name of the environment variable.
+        default (bool): The default value to return if the variable is not set.
+
+    Returns:
+        bool: True if the value is 'yes', 'y', 'true', '1', or 't' (case-insensitive).
+    """
     # The default parameter for getenv_bool is used if the config default itself needs a fallback,
     # or if the call site specifically wants to override the global default.
     # For typical usage, the config default (passed at call site) is preferred.
@@ -20,6 +35,18 @@ REQUIRE_API_KEY = getenv_bool('REQUIRE_API_KEY', DEFAULT_CONFIGS["REQUIRE_API_KE
 DETAILED_ERROR_LOGGING = getenv_bool('DETAILED_ERROR_LOGGING', DEFAULT_CONFIGS["DETAILED_ERROR_LOGGING"])
 
 def require_api_key(f):
+    """
+    Decorator to enforce API key authentication on Flask routes.
+
+    Checks for a 'Bearer' token in the 'Authorization' header and compares
+    it against the configured API_KEY.
+
+    Args:
+        f (function): The route function to wrap.
+
+    Returns:
+        function: The decorated function.
+    """
     @wraps(f)
     def decorated_function(*args, **kwargs):
         if not REQUIRE_API_KEY:

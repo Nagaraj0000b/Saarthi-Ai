@@ -1,4 +1,9 @@
-# server.py
+"""
+Flask server implementation for the OpenAI-compatible Edge TTS API.
+
+This module defines the API endpoints, handles request parsing, and
+orchestrates the TTS generation and streaming processes.
+"""
 
 from flask import Flask, request, send_file, jsonify, Response
 from gevent.pywsgi import WSGIServer
@@ -34,7 +39,17 @@ EXPAND_API = getenv_bool('EXPAND_API', DEFAULT_CONFIGS["EXPAND_API"])
 
 # Currently in "beta" — needs more extensive testing where drop-in replacement warranted
 def generate_sse_audio_stream(text, voice, speed):
-    """Generator function for SSE streaming with JSON events."""
+    """
+    Generator function for SSE (Server-Sent Events) streaming with JSON events.
+
+    Args:
+        text (str): The text to convert to speech.
+        voice (str): The voice name.
+        speed (float): The playback speed multiplier.
+
+    Yields:
+        str: SSE formatted data string containing base64 encoded audio chunks or completion events.
+    """
     try:
         # Generate streaming audio chunks and convert to SSE format
         for chunk in generate_speech_stream(text, voice, speed):
@@ -75,6 +90,15 @@ def generate_sse_audio_stream(text, voice, speed):
 @app.route('/audio/speech', methods=['POST'])  # Add this line for the alias
 @require_api_key
 def text_to_speech():
+    """
+    Endpoint for text-to-speech conversion.
+
+    Accepts a JSON payload with 'input', 'voice', 'response_format', 'speed', and 'stream_format'.
+    Supports raw audio response or SSE streaming.
+
+    Returns:
+        Response: The audio data or an SSE stream.
+    """
     try:
         data = request.json
         if not data or 'input' not in data:
@@ -148,18 +172,36 @@ def text_to_speech():
 @app.route('/v1/audio/models', methods=['GET', 'POST'])
 @app.route('/audio/models', methods=['GET', 'POST'])
 def list_models():
+    """
+    Endpoint to list available models.
+
+    Returns:
+        Response: JSON containing the list of models.
+    """
     return jsonify({"models": get_models_formatted()})
 
 # OpenAI endpoint format
 @app.route('/v1/audio/voices', methods=['GET', 'POST'])
 @app.route('/audio/voices', methods=['GET', 'POST'])
 def list_voices_formatted():
+    """
+    Endpoint to list available voices in a formatted manner.
+
+    Returns:
+        Response: JSON containing the list of voices.
+    """
     return jsonify({"voices": get_voices_formatted()})
 
 @app.route('/v1/voices', methods=['GET', 'POST'])
 @app.route('/voices', methods=['GET', 'POST'])
 @require_api_key
 def list_voices():
+    """
+    Endpoint to list available voices, optionally filtered by language.
+
+    Returns:
+        Response: JSON containing the list of voices.
+    """
     specific_language = None
 
     data = request.args if request.method == 'GET' else request.json
@@ -172,6 +214,12 @@ def list_voices():
 @app.route('/voices/all', methods=['GET', 'POST'])
 @require_api_key
 def list_all_voices():
+    """
+    Endpoint to list all available voices across all languages.
+
+    Returns:
+        Response: JSON containing the list of all voices.
+    """
     return jsonify({"voices": get_voices('all')})
 
 """
@@ -184,6 +232,15 @@ Support for ElevenLabs and Azure AI Speech
 @app.route('/elevenlabs/v1/text-to-speech/<voice_id>', methods=['POST'])
 @require_api_key
 def elevenlabs_tts(voice_id):
+    """
+    Beta endpoint for ElevenLabs-compatible TTS.
+
+    Args:
+        voice_id (str): The voice identifier in the URL.
+
+    Returns:
+        Response: The generated audio file.
+    """
     if not EXPAND_API:
         return jsonify({"error": f"Endpoint not allowed"}), 500
     
@@ -221,6 +278,12 @@ def elevenlabs_tts(voice_id):
 @app.route('/azure/cognitiveservices/v1', methods=['POST'])
 @require_api_key
 def azure_tts():
+    """
+    Beta endpoint for Azure-compatible TTS using SSML.
+
+    Returns:
+        Response: The generated audio file.
+    """
     if not EXPAND_API:
         return jsonify({"error": f"Endpoint not allowed"}), 500
     

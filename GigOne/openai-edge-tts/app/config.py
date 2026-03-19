@@ -1,4 +1,9 @@
-# config.py
+"""
+Configuration settings for the OpenAI Edge TTS server.
+
+This module defines default values for server settings, TTS parameters,
+and feature flags used throughout the application.
+"""
 
 DEFAULT_CONFIGS = {
     # Server settings

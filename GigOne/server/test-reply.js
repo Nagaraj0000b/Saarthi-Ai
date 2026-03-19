@@ -1,23 +1,40 @@
+/**
+ * @fileoverview Standalone Debug Utility for Chat Reply Workflows.
+ * Orchestrates a manual conversational turn to verify API responsiveness 
+ * and end-to-end integration logic.
+ * 
+ * @module server/test-reply
+ * @requires axios
+ * @requires fs
+ * @requires form-data
+ */
+
 const axios = require('axios');
 const fs = require('fs');
 const FormData = require('form-data');
 
-// Use existing API to start a chat and get a real conversationId
+/**
+ * Debug Reply Sequence
+ * Simulates a check-in session and a subsequent reply.
+ * 
+ * @async
+ * @function debugReply
+ */
 async function debugReply() {
   try {
-    // 1. Start session to get a valid conversation ID
-    console.log("Starting session...");
+    // Stage 1: Session Initialization
+    console.log("🚀 Initializing test session...");
     const startRes = await axios.post('http://localhost:5000/api/chat/start', {}, {
       headers: {
-        Authorization: 'Bearer test-token' // Auth is mocked out using auth middleware if no DB? Wait, let's just use any token, wait if auth middleware requires a valid JWT this will fail.
+        Authorization: 'Bearer test-token' 
       }
     });
 
-    // If auth fails, we just print that.
-    console.log("Session started:", startRes.data);
+    console.log("✅ Session initiated:", startRes.data);
 
   } catch (err) {
-    console.error("Test script error:", err.response?.data || err.message);
+    // Comprehensive error reporting for debug visibility
+    console.error("❌ Debug sequence failure:", err.response?.data || err.message);
   }
 }
 

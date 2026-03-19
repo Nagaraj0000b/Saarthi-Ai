@@ -1,39 +1,65 @@
-const router = require("express").Router(); // mini express app for this route group
-const { register, login } = require("../controllers/authController"); // import controllers
+/**
+ * @fileoverview Authentication Routes for local and Google OAuth 2.0.
+ * Defines endpoints for user registration, login, and social authentication callbacks.
+ * 
+ * @module server/routes/auth
+ * @requires express
+ * @requires passport
+ * @requires jsonwebtoken
+ * @requires ../controllers/authController
+ */
 
-// POST /api/auth/register  →  create a new user
+const router = require("express").Router();
+const { register, login } = require("../controllers/authController");
+const passport = require("passport");
+const jwt = require("jsonwebtoken");
+
+/**
+ * @route POST /api/auth/register
+ * @desc Register a new user
+ * @access Public
+ */
 router.post("/register", register);
 
-// POST /api/auth/login  →  login and get token
+/**
+ * @route POST /api/auth/login
+ * @desc Authenticate user and return JWT
+ * @access Public
+ */
 router.post("/login", login);
 
 // ==========================================
 // GOOGLE OAUTH ROUTES
 // ==========================================
-const passport = require("passport");
-const jwt = require("jsonwebtoken");
 
-// 1. Send the user to Google to sign in
+/**
+ * @route GET /api/auth/google
+ * @desc Initiate Google OAuth 2.0 authentication flow
+ * @access Public
+ */
 router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
 
-// 2. Google redirects back here with the user's profile
+/**
+ * @route GET /api/auth/google/callback
+ * @desc Google OAuth 2.0 callback endpoint
+ * @access Private (via Passport)
+ */
 router.get(
   "/google/callback",
   passport.authenticate("google", { session: false, failureRedirect: "/login" }),
   (req, res) => {
-    // If successful, passport attaches the user to req.user
     const user = req.user;
 
-    // Generate our JWT token for them 
+    // Generate internal JWT for the Google-authenticated user
     const token = jwt.sign(
       { userId: user._id, role: user.role },
       process.env.JWT_SECRET,
       { expiresIn: "7d" }
     );
 
-    // Redirect them back to our frontend React app with the token in the URL URL
-    // so the React app can grab it and save it to LocalStorage
-    res.redirect(`http://localhost:5173/user/dashboard?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user._id, name: user.name, role: user.role }))}`);
+    // Deep link redirect back to the frontend with auth credentials in query params
+    const redirectUrl = process.env.CLIENT_URL || "http://localhost:5173";
+    res.redirect(`${redirectUrl}/user/dashboard?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user._id, name: user.name, role: user.role }))}`);
   }
 );
 

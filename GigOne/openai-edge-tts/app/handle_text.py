@@ -1,4 +1,9 @@
-# handle_text.py
+"""
+Text processing and cleaning for TTS input.
+
+This module provides functions to sanitize text, remove Markdown formatting,
+and add contextual hints for better text-to-speech output.
+"""
 
 import re
 import emoji

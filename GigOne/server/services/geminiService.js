@@ -1,29 +1,38 @@
-// for sentimental analysis
+/**
+ * @fileoverview Gemini AI Service for standalone natural language processing tasks.
+ * Primarily handles granular sentiment analysis and emotional intelligence logic.
+ * 
+ * @module server/services/geminiService
+ * @requires @google/generative-ai
+ */
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
 
 const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
 const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
 
+/**
+ * Analyzes the sentiment and emotional state of a worker's input.
+ * 
+ * @async
+ * @function analyzeSentiment
+ * @param {string} text - The natural language input from the worker.
+ * @returns {Promise<Object>} Structured sentiment data (mood, score, summary, suggestion).
+ */
 const analyzeSentiment = async (text) => {
   const prompt = `
 You are an emotional intelligence engine for a gig worker companion app.
-
-Analyze the following text spoken by a gig worker (Uber/Swiggy/Rapido driver) and return a JSON object with:
-1. "mood" — one of: "happy", "neutral", "stressed", "frustrated", "tired", "excited"
-2. "score" — a number from -1.0 (very negative) to 1.0 (very positive)
-3. "summary" — one sentence describing how the worker is feeling
-4. "suggestion" — one short, friendly, actionable tip for the worker based on their mood
-
-Return ONLY valid JSON. No markdown, no explanation.
+Analyze the following text and return a JSON object with:
+1. "mood" (happy|neutral|stressed|frustrated|tired|excited)
+2. "score" (-1.0 to 1.0)
+3. "summary" (1 sentence)
+4. "suggestion" (1 actionable tip)
 
 Text: "${text}"
   `;
 
   const result = await model.generateContent(prompt);
   const raw = result.response.text().trim();
-
-  // Strip markdown code fences if Gemini wraps it
   const cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "");
   return JSON.parse(cleaned);
 };

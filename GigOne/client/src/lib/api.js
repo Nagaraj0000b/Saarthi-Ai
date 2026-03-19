@@ -1,19 +1,30 @@
+/**
+ * @fileoverview Centralized API Client configuration.
+ * Configures an Axios instance with base parameters and request interceptors 
+ * to handle automated JWT injection for authenticated requests.
+ * 
+ * @module client/lib/api
+ * @requires axios
+ */
+
 import axios from 'axios';
 
-// 1. Create a custom Axios instance
+/**
+ * Shared Axios Instance
+ * Default configuration for internal API communication.
+ */
 const api = axios.create({
-  // Point to our Express backend
-  baseURL: 'http://localhost:5000/api', 
+  baseURL: import.meta.env.VITE_API_URL || 'http://localhost:5000/api', 
 });
 
-// 2. Add an "interceptor" to automatically attach the JWT token
-// Think of this as a middleman that intercepts every outgoing request
+/**
+ * Auth Interceptor
+ * Injects the Bearer token from LocalStorage into every outgoing request header.
+ */
 api.interceptors.request.use((config) => {
-  // Check if we have a token saved in localStorage
   const token = localStorage.getItem('token');
   
   if (token) {
-    // If yes, attach it to the Authorization header
     config.headers.Authorization = `Bearer ${token}`;
   }
   
