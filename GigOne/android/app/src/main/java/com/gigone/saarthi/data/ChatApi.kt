@@ -14,24 +14,26 @@ interface ChatApi {
 
     /**
      * Initializes a new check-in session.
-     * Mirrors: POST /api/chat/start  { language }
+     * Mirrors: POST /api/chat/start  { language, platforms, vehicles }
      */
     @POST("chat/start")
     suspend fun startSession(
-        @Body body: Map<String, String>
+        @Body body: StartSessionRequest
     ): StartSessionResponse
 
     /**
      * Submits a recorded audio file for transcription + AI reply.
      * Mirrors: POST /api/chat/reply  (multipart/form-data)
-     * Fields: audio (file), conversationId, language (optional)
+     * Fields: audio (file), conversationId, language, platforms, vehicles
      */
     @Multipart
     @POST("chat/reply")
     suspend fun sendAudioReply(
         @Part audio: MultipartBody.Part,
         @Part("conversationId") conversationId: RequestBody,
-        @Part("language") language: RequestBody? = null
+        @Part("language") language: RequestBody? = null,
+        @Part("platforms") platforms: RequestBody? = null,
+        @Part("vehicles") vehicles: RequestBody? = null
     ): AudioReplyResponse
 
     /**

@@ -19,5 +19,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun SaarthiTheme(content: @Composable () -> Unit) {
+    // Strictly enforce Dark Mode
+    AppColors.instance.updateColorsFrom(darkColors)
     MaterialTheme(colorScheme = DarkColorScheme, content = content)
 }

@@ -52,6 +52,14 @@ const generateGreeting = async (userName = "buddy", context = null, language = n
     contextBlock += `\nCurrent weather: ${weather.condition}, ${weather.temp}C.`;
   }
 
+  if (context?.platforms && context.platforms.length > 0) {
+    contextBlock += `\nWorker's platforms: ${context.platforms.join(", ")}.`;
+  }
+  
+  if (context?.vehicles && context.vehicles.length > 0) {
+    contextBlock += `\nWorker's vehicles: ${context.vehicles.join(", ")}.`;
+  }
+
   if (context?.burnoutStatus) {
     if (context.burnoutStatus.isBurnoutAlert) {
       contextBlock +=
@@ -65,7 +73,7 @@ const generateGreeting = async (userName = "buddy", context = null, language = n
   const languageRule =
     language && language !== "English"
       ? `LANGUAGE RULE: You MUST reply ONLY in ${language}. Do NOT use English or Hinglish. Respond entirely in ${language}.`
-      : "Personality: warm, supportive, casual Hinglish (Hindi + English mix).";
+      : "LANGUAGE RULE: You MUST reply ONLY in English. Do NOT use Hinglish or Hindi. Keep it natural and conversational.";
 
   const prompt = `
 You are an AI companion for Indian gig economy workers.
@@ -104,8 +112,11 @@ const processChatTurn = async (
 ) => {
   const stepConfig = STEP_CONFIG[currentStep];
   if (!stepConfig) {
+    const isEnglish = !language || language === "English";
     return {
-      reply: "Aaj ka check-in ho chuka hai! Naya check-in shuru karne ke liye mic button dabao.",
+      reply: isEnglish 
+        ? "Today's check-in is complete! Hold the mic to start a new one." 
+        : "Aaj ka check-in ho chuka hai! Naya check-in shuru karne ke liye mic button dabao.",
       extractedValue: null,
     };
   }
@@ -121,6 +132,14 @@ const processChatTurn = async (
     contextBlock += `\nWeather: ${weather.condition}, ${weather.temp}C.`;
   }
 
+  if (context?.platforms && context.platforms.length > 0) {
+    contextBlock += `\nWorker's platforms: ${context.platforms.join(", ")}.`;
+  }
+  
+  if (context?.vehicles && context.vehicles.length > 0) {
+    contextBlock += `\nWorker's vehicles: ${context.vehicles.join(", ")}.`;
+  }
+
   if (context?.traffic) {
     const traffic = context.traffic;
     contextBlock += `\nTraffic: ${traffic.traffic_level} (${traffic.congestion_percent}% congestion).`;
@@ -129,7 +148,11 @@ const processChatTurn = async (
   const languageRule =
     language && language !== "English"
       ? `LANGUAGE RULE: You MUST reply ONLY in ${language}. Do NOT use English or Hinglish. All text in the "reply" field MUST be in ${language}. Short sentences. No emojis.`
-      : "Personality: Warm, supportive, casual Hinglish. Short sentences (1-2 max). No emojis.";
+      : `LANGUAGE RULE: You MUST reply ONLY in English. Do NOT use Hinglish or Hindi. Keep it natural, conversational, and use short sentences. No emojis.`;
+
+  const personalizedGoal = currentStep === "mood" && context?.platforms?.length > 0
+    ? `${stepConfig.goal} (Specifically check if they worked on: ${context.platforms.join(", ")} or something else).`
+    : stepConfig.goal;
 
   const prompt = `
 You are an AI companion for Indian gig economy workers.
@@ -143,7 +166,7 @@ ${historyBlock}
 
 Worker just said: "${userText}"
 
-YOUR GOAL FOR THIS REPLY: ${stepConfig.goal}
+YOUR GOAL FOR THIS REPLY: ${personalizedGoal}
 ${stepConfig.extract ? `
 CRITICAL EXTRACTION RULE for "${stepConfig.extract}":
 - ONLY extract "${stepConfig.extract}" if the worker EXPLICITLY mentioned it in their latest message.
@@ -182,12 +205,17 @@ Return ONLY a JSON object:
       const normalized =
         String(parsed.extractedValue).charAt(0).toUpperCase() +
         String(parsed.extractedValue).slice(1).toLowerCase();
-      const validPlatforms = ["Uber", "Swiggy", "Rapido", "Other"];
+      
+      const userPlatforms = context?.platforms || [];
+      const validPlatforms = userPlatforms.length > 0 ? [...userPlatforms, "Other"] : ["Uber", "Swiggy", "Rapido", "Other"];
 
-      if (!validPlatforms.includes(normalized)) {
+      if (!validPlatforms.some(p => p.toLowerCase() === normalized.toLowerCase())) {
         parsed.extractedValue = null;
-        parsed.reply =
-          "Main theek se samajh nahi paaya ki aapne aaj kis platform par kaam kiya. Kya aap dobara bata sakte hain? (Uber, Swiggy, Rapido ya Other?)";
+        const platformList = validPlatforms.join(", ");
+        const isEnglish = !language || language === "English";
+        parsed.reply = isEnglish
+          ? `I didn't quite catch which platform you worked on. Could you say it again? (Maybe one of these: ${platformList}?)`
+          : `Main theek se samajh nahi paaya ki aapne aaj kis platform par kaam kiya. Kya aap dobara bata sakte hain? (${platformList}?)`;
       } else {
         parsed.extractedValue = normalized;
       }

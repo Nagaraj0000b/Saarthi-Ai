@@ -97,11 +97,17 @@ const transcribeAudio = async (filePath) => {
       // Translate the transcribed text to English
       const tClient = getTranslateClient();
       const [translation] = await tClient.translate(transcribedText, 'en');
-      return translation;
+      return {
+        originalText: transcribedText,
+        translatedText: translation
+      };
     } catch (translateError) {
       console.error("[GCP Translate Error]:", translateError);
       // Fallback to transcribed text if translation fails
-      return transcribedText;
+      return {
+        originalText: transcribedText,
+        translatedText: transcribedText
+      };
     }
 
   } catch (error) {

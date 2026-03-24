@@ -142,7 +142,8 @@ fun SignInScreen(
                                 val api = ApiClient.create<AuthApi>()
                                 val response = api.login(LoginRequest(email.trim(), password))
                                 TokenManager.saveToken(context, response.token)
-                                TokenManager.saveUserName(context, response.user.name.split(" ").first())
+                                TokenManager.saveUserName(context, response.user.name) // Save full name
+                                TokenManager.saveUserEmail(context, email) // Save email used to login
                                 onSignInSuccess()
                             } catch (e: retrofit2.HttpException) {
                                 val errorBody = e.response()?.errorBody()?.string()

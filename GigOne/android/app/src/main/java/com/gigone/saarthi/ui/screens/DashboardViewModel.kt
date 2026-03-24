@@ -78,15 +78,26 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         viewModelScope.launch {
             try {
                 _isProcessing.value = true
-                val data = chatApi.startSession(mapOf("language" to _selectedLanguage.value))
+                
+                val platforms = TokenManager.getPlatforms(ctx).toList()
+                val vehicles = TokenManager.getVehicles(ctx).toList()
+                
+                val body = com.gigone.saarthi.data.StartSessionRequest(
+                    language = _selectedLanguage.value,
+                    platforms = platforms,
+                    vehicles = vehicles
+                )
+                
+                val data = chatApi.startSession(body)
                 conversationId = data.conversationId
                 _messages.value = listOf(ChatMessage("assistant", data.reply))
                 
                 val token = TokenManager.getToken(ctx) ?: ""
                 ttsPlayer.speak(data.reply, _selectedLanguage.value, token)
             } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Failed to start session", e)
                 _messages.value = _messages.value + ChatMessage(
-                    "assistant", "⚠️ Could not connect to server. Check your WiFi and try again."
+                    "assistant", "⚠️ Could not connect to server. Error: ${e.message}"
                 )
             } finally {
                 _isProcessing.value = false
@@ -141,8 +152,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 val convIdBody = conversationId!!.toRequestBody("text/plain".toMediaType())
                 val langBody = _selectedLanguage.value.toRequestBody("text/plain".toMediaType())
+                
+                val platforms = TokenManager.getPlatforms(ctx).joinToString(",")
+                val vehicles = TokenManager.getVehicles(ctx).joinToString(",")
+                val platformsBody = platforms.toRequestBody("text/plain".toMediaType())
+                val vehiclesBody = vehicles.toRequestBody("text/plain".toMediaType())
 
-                val data: AudioReplyResponse = chatApi.sendAudioReply(audioPart, convIdBody, langBody)
+                val data: AudioReplyResponse = chatApi.sendAudioReply(
+                    audioPart, 
+                    convIdBody, 
+                    langBody,
+                    platformsBody,
+                    vehiclesBody
+                )
 
                 // Replace the "Processing" bubble with real transcription + reply
                 val current = _messages.value.dropLast(1)

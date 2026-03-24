@@ -2,17 +2,25 @@ package com.gigone.saarthi.ui.screens
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.outlined.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -24,6 +32,35 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
+// ═══════════════════════ PLATFORM ICONS (shared logic) ═══════════════════════
+private data class PlatformStyle(val icon: ImageVector, val color: Color)
+
+private fun platformStyle(platform: String): PlatformStyle = when (platform.lowercase()) {
+    "uber" -> PlatformStyle(Icons.Default.LocalTaxi, Color(0xFF276EF1))
+    "ola" -> PlatformStyle(Icons.Default.LocalTaxi, Color(0xFF1C8D3F))
+    "swiggy" -> PlatformStyle(Icons.Default.Fastfood, Color(0xFFFC8019))
+    "zomato" -> PlatformStyle(Icons.Default.Restaurant, Color(0xFFE23744))
+    "rapido" -> PlatformStyle(Icons.Default.TwoWheeler, Color(0xFFFFC72C))
+    "zepto" -> PlatformStyle(Icons.Default.ShoppingBag, Color(0xFF8B2FDB))
+    "blinkit" -> PlatformStyle(Icons.Default.ShoppingCart, Color(0xFFF5C418))
+    "porter" -> PlatformStyle(Icons.Default.LocalShipping, Color(0xFF2B3A4A))
+    "dunzo" -> PlatformStyle(Icons.Default.DeliveryDining, Color(0xFF00D290))
+    else -> PlatformStyle(Icons.Default.Work, AppColors.TextSecondary)
+}
+
+// ═══════════════════════ MOOD HELPERS ═══════════════════════
+private data class MoodVisual(val icon: ImageVector, val label: String, val color: Color)
+
+private fun getMoodVisual(score: Float?): MoodVisual = when {
+    score == null -> MoodVisual(Icons.Outlined.SentimentNeutral, "N/A", AppColors.TextMuted)
+    score >= 0.5f -> MoodVisual(Icons.Outlined.SentimentVerySatisfied, "Great", Color(0xFF10B981))
+    score >= 0.1f -> MoodVisual(Icons.Outlined.SentimentSatisfied, "Good", Color(0xFF34D399))
+    score >= -0.1f -> MoodVisual(Icons.Outlined.SentimentNeutral, "Okay", Color(0xFFFBBF24))
+    score >= -0.5f -> MoodVisual(Icons.Outlined.SentimentDissatisfied, "Low", Color(0xFFF97316))
+    else -> MoodVisual(Icons.Outlined.SentimentVeryDissatisfied, "Stressed", Color(0xFFEF4444))
+}
+
+// ═══════════════════════ MAIN SCREEN ═══════════════════════
 @Composable
 fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
     val logs by vm.logs.collectAsStateWithLifecycle()
@@ -32,9 +69,7 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
 
     var selectedLog by remember { mutableStateOf<ChatHistoryLog?>(null) }
 
-    LaunchedEffect(Unit) {
-        vm.loadLogs()
-    }
+    LaunchedEffect(Unit) { vm.loadLogs() }
 
     Column(
         modifier = Modifier
@@ -42,68 +77,65 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
             .background(AppColors.BgDeep)
             .statusBarsPadding()
     ) {
-        // Header
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 16.dp),
-            verticalAlignment = Alignment.CenterVertically
+        // ── Header ───────────────────────────────────────────────────────
+        Column(
+            modifier = Modifier.padding(horizontal = 20.dp, vertical = 14.dp)
         ) {
             Text(
                 "Shift History",
-                fontSize = 20.sp,
+                fontSize = 22.sp,
                 fontWeight = FontWeight.ExtraBold,
                 color = AppColors.TextPrimary
             )
+            Text(
+                "Review past check-ins, mood, and burnout trends",
+                fontSize = 12.sp,
+                color = AppColors.TextMuted,
+                modifier = Modifier.padding(top = 2.dp)
+            )
         }
 
-        Text(
-            "Review your past AI check-ins, mood tracking, and burnout trends.",
-            fontSize = 13.sp,
-            color = AppColors.TextSecondary,
-            modifier = Modifier.padding(start = 24.dp, end = 24.dp, bottom = 16.dp)
-        )
-
-        // List
+        // ── Content ──────────────────────────────────────────────────────
         if (isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = AppColors.Primary)
+                CircularProgressIndicator(color = AppColors.Primary, strokeWidth = 2.5.dp)
             }
         } else if (error != null) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "Error loading history:\n$error\n\nTake a screenshot of this!",
-                    color = Color(0xFFFF4D6D),
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(32.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = AppColors.Error, modifier = Modifier.size(40.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text("Failed to load history", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
+                    Text(error ?: "", color = AppColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
+                }
             }
         } else if (logs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text(
-                    "No check-in logs found. Run a check-in on the Dashboard!",
-                    color = AppColors.TextSecondary,
-                    textAlign = TextAlign.Center,
-                    modifier = Modifier.padding(32.dp)
-                )
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(Icons.Outlined.HistoryToggleOff, contentDescription = null, tint = AppColors.TextMuted, modifier = Modifier.size(48.dp))
+                    Spacer(Modifier.height(12.dp))
+                    Text("No check-ins yet", color = AppColors.TextSecondary, fontWeight = FontWeight.SemiBold)
+                    Text("Start a check-in on the Dashboard", color = AppColors.TextMuted, fontSize = 12.sp)
+                }
             }
         } else {
             LazyColumn(
-                contentPadding = PaddingValues(start = 16.dp, top = 0.dp, end = 16.dp, bottom = 24.dp),
-                verticalArrangement = Arrangement.spacedBy(16.dp)
+                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                verticalArrangement = Arrangement.spacedBy(6.dp)
             ) {
-                items(logs) { log ->
-                    WorkLogCard(
+                items(logs, key = { it._id }) { log ->
+                    CompactWorkLogCard(
                         log = log,
                         onReadTranscript = { selectedLog = log },
                         onDelete = { vm.deleteLog(log._id) }
                     )
                 }
+                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
 
-    // Transcript Modal
+    // Transcript Dialog
     if (selectedLog != null) {
         TranscriptDialog(
             log = selectedLog!!,
@@ -112,26 +144,27 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
     }
 }
 
+// ═══════════════════════ COMPACT WORK LOG CARD ═══════════════════════
 @Composable
-fun WorkLogCard(log: ChatHistoryLog, onReadTranscript: () -> Unit, onDelete: () -> Unit) {
+private fun CompactWorkLogCard(log: ChatHistoryLog, onReadTranscript: () -> Unit, onDelete: () -> Unit) {
     val platform = log.extractedData?.platform ?: "Unknown"
-    val emoji = when(platform) {
-        "Uber" -> "🚗"
-        "Swiggy" -> "🍔"
-        "Rapido" -> "🏍️"
-        else -> "📦"
-    }
+    val style = platformStyle(platform)
 
     val legacyScores = log.messages.mapNotNull { it.sentiment?.score }
-    val avgScore = log.dailyMood?.takeIf { it.isValid }?.moodScore 
+    val avgScore = log.dailyMood?.takeIf { it.isValid }?.moodScore
         ?: if (legacyScores.isNotEmpty()) legacyScores.average().toFloat() else null
-    val moodEmoji = when {
-        avgScore == null -> "😐"
-        avgScore >= 0.5f -> "😄"
-        avgScore >= 0.1f -> "🙂"
-        avgScore >= -0.1f -> "😐"
-        avgScore >= -0.5f -> "😟"
-        else -> "😫"
+    val mood = getMoodVisual(avgScore)
+
+    val statusText = log.burnoutStatus?.action ?: "Safe"
+    val statusColor = when (statusText) {
+        "Rest Required" -> AppColors.Error
+        "Take a Break" -> Color(0xFFFFB347)
+        else -> AppColors.Accent
+    }
+    val statusIcon = when (statusText) {
+        "Rest Required" -> Icons.Outlined.Warning
+        "Take a Break" -> Icons.Outlined.PauseCircle
+        else -> Icons.Outlined.CheckCircle
     }
 
     val isToday = try {
@@ -142,75 +175,123 @@ fun WorkLogCard(log: ChatHistoryLog, onReadTranscript: () -> Unit, onDelete: () 
     } catch (e: Exception) { false }
 
     Surface(
-        color = Color(0x1A6C63FF),
-        shape = RoundedCornerShape(12.dp),
+        color = AppColors.BgCard,
+        shape = RoundedCornerShape(14.dp),
+        border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.BorderSubtle),
         modifier = Modifier.fillMaxWidth()
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
+        Column(modifier = Modifier.padding(14.dp)) {
+            // ── Top row: date + platform ─────────────────────────────────
             Row(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text(
-                    formatLogDate(log.createdAt),
-                    fontWeight = FontWeight.Bold,
-                    color = AppColors.TextPrimary,
-                    fontSize = 15.sp
-                )
-                Surface(
-                    color = Color(0x3300D4AA),
-                    shape = RoundedCornerShape(12.dp)
-                ) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(
+                        Icons.Outlined.CalendarToday,
+                        contentDescription = null,
+                        tint = AppColors.TextMuted,
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
                     Text(
-                        "$emoji $platform",
-                        color = AppColors.Accent,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                        formatLogDate(log.createdAt),
+                        fontWeight = FontWeight.SemiBold,
+                        color = AppColors.TextPrimary,
+                        fontSize = 13.sp
                     )
                 }
-            }
 
-            Spacer(Modifier.height(12.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(24.dp)) {
-                Column {
-                    Text("Mood", color = AppColors.TextSecondary, fontSize = 12.sp)
-                    Text("$moodEmoji ${avgScore?.let { "%.2f".format(it) } ?: "N/A"}", fontSize = 16.sp, color = AppColors.TextPrimary)
-                }
-                Column {
-                    Text("Status", color = AppColors.TextSecondary, fontSize = 12.sp)
-                    val statusText = log.burnoutStatus?.action ?: "Safe"
-                    val statusColor = when (statusText) {
-                        "Rest Required" -> Color(0xFFFF4D6D)
-                        "Take a Break" -> Color(0xFFFFB347)
-                        else -> AppColors.Accent
+                // Platform pill
+                Surface(
+                    color = style.color.copy(alpha = 0.12f),
+                    shape = RoundedCornerShape(8.dp),
+                    border = androidx.compose.foundation.BorderStroke(1.dp, style.color.copy(alpha = 0.25f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(style.icon, contentDescription = null, tint = style.color, modifier = Modifier.size(14.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text(platform, color = style.color, fontSize = 11.sp, fontWeight = FontWeight.Bold)
                     }
-                    Text(statusText, fontSize = 14.sp, fontWeight = FontWeight.Bold, color = statusColor)
                 }
             }
 
-            Spacer(Modifier.height(16.dp))
+            Spacer(Modifier.height(10.dp))
 
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            // ── Stats row: mood + status ─────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Mood
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(mood.icon, contentDescription = null, tint = mood.color, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Column {
+                        Text("Mood", color = AppColors.TextMuted, fontSize = 10.sp)
+                        Text(
+                            "${mood.label} ${avgScore?.let { "%.1f".format(it) } ?: ""}".trim(),
+                            fontSize = 12.sp,
+                            color = mood.color,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                    }
+                }
+
+                // Status
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(statusIcon, contentDescription = null, tint = statusColor, modifier = Modifier.size(18.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Column {
+                        Text("Status", color = AppColors.TextMuted, fontSize = 10.sp)
+                        Text(
+                            statusText,
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            color = statusColor
+                        )
+                    }
+                }
+            }
+
+            Spacer(Modifier.height(10.dp))
+
+            // ── Bottom row: actions ──────────────────────────────────────
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
                 Button(
                     onClick = onReadTranscript,
-                    modifier = Modifier.weight(1f).height(40.dp),
-                    colors = ButtonDefaults.buttonColors(containerColor = Color(0x1AFFFFFF)),
-                    shape = RoundedCornerShape(8.dp)
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(34.dp),
+                    contentPadding = PaddingValues(horizontal = 12.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary.copy(alpha = 0.12f)),
+                    shape = RoundedCornerShape(8.dp),
+                    elevation = ButtonDefaults.buttonElevation(0.dp)
                 ) {
-                    Text("Read Transcript", fontSize = 13.sp, color = AppColors.TextPrimary)
+                    Icon(Icons.Outlined.Article, contentDescription = null, tint = AppColors.Primary, modifier = Modifier.size(15.dp))
+                    Spacer(Modifier.width(6.dp))
+                    Text("Transcript", fontSize = 12.sp, color = AppColors.Primary, fontWeight = FontWeight.SemiBold)
                 }
+
                 if (isToday) {
                     Button(
                         onClick = onDelete,
-                        modifier = Modifier.size(40.dp),
+                        modifier = Modifier
+                            .height(34.dp)
+                            .width(42.dp),
                         contentPadding = PaddingValues(0.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = Color(0x1AFF4D6D)),
-                        shape = RoundedCornerShape(8.dp)
+                        colors = ButtonDefaults.buttonColors(containerColor = AppColors.Error.copy(alpha = 0.12f)),
+                        shape = RoundedCornerShape(8.dp),
+                        elevation = ButtonDefaults.buttonElevation(0.dp)
                     ) {
-                        Text("🗑️", fontSize = 16.sp)
+                        Icon(Icons.Outlined.DeleteOutline, contentDescription = "Delete", tint = AppColors.Error, modifier = Modifier.size(16.dp))
                     }
                 }
             }
@@ -218,19 +299,26 @@ fun WorkLogCard(log: ChatHistoryLog, onReadTranscript: () -> Unit, onDelete: () 
     }
 }
 
+// ═══════════════════════ TRANSCRIPT DIALOG ═══════════════════════
 @Composable
 fun TranscriptDialog(log: ChatHistoryLog, onDismiss: () -> Unit) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        containerColor = Color(0xFF131626),
+        containerColor = AppColors.BgCard,
+        shape = RoundedCornerShape(24.dp),
+        tonalElevation = 0.dp,
         title = {
-            Column {
-                Text("Chat Transcript", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
-                Text(formatLogDate(log.createdAt), fontSize = 12.sp, color = AppColors.TextSecondary)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Icon(Icons.Outlined.Article, contentDescription = null, tint = AppColors.Primary, modifier = Modifier.size(22.dp))
+                Spacer(Modifier.width(10.dp))
+                Column {
+                    Text("Chat Transcript", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                    Text(formatLogDate(log.createdAt), fontSize = 11.sp, color = AppColors.TextMuted)
+                }
             }
         },
         text = {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(log.messages) { msg ->
                     val isUser = msg.role == "user"
                     Column(
@@ -239,20 +327,30 @@ fun TranscriptDialog(log: ChatHistoryLog, onDismiss: () -> Unit) {
                     ) {
                         Text(
                             if (isUser) "You" else "Saarthi",
-                            color = AppColors.TextSecondary,
-                            fontSize = 11.sp,
-                            modifier = Modifier.padding(bottom = 4.dp)
+                            color = if (isUser) AppColors.Accent else AppColors.Primary,
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(bottom = 3.dp)
                         )
                         Surface(
-                            color = if (isUser) Color(0x3300D4AA) else Color(0x336C63FF),
-                            shape = RoundedCornerShape(12.dp),
+                            color = if (isUser) AppColors.Accent.copy(alpha = 0.12f) else AppColors.Primary.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(
+                                topStart = 12.dp, topEnd = 12.dp,
+                                bottomStart = if (isUser) 12.dp else 4.dp,
+                                bottomEnd = if (isUser) 4.dp else 12.dp
+                            ),
+                            border = androidx.compose.foundation.BorderStroke(
+                                1.dp,
+                                if (isUser) AppColors.Accent.copy(alpha = 0.2f) else AppColors.Primary.copy(alpha = 0.2f)
+                            ),
                             modifier = Modifier.widthIn(max = 240.dp)
                         ) {
                             Text(
                                 msg.text,
                                 color = AppColors.TextPrimary,
                                 fontSize = 13.sp,
-                                modifier = Modifier.padding(12.dp)
+                                lineHeight = 18.sp,
+                                modifier = Modifier.padding(10.dp)
                             )
                         }
                     }
@@ -260,8 +358,12 @@ fun TranscriptDialog(log: ChatHistoryLog, onDismiss: () -> Unit) {
             }
         },
         confirmButton = {
-            Button(onClick = onDismiss, colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary)) {
-                Text("Close")
+            Button(
+                onClick = onDismiss,
+                colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
+                shape = RoundedCornerShape(12.dp)
+            ) {
+                Text("Close", fontWeight = FontWeight.Bold)
             }
         }
     )
@@ -274,6 +376,6 @@ fun formatLogDate(isoString: String): String {
         val date = parser.parse(isoString) ?: return isoString
         formatter.format(date)
     } catch (e: Exception) {
-         isoString.take(10)
+        isoString.take(10)
     }
 }

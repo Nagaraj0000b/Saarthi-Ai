@@ -171,11 +171,11 @@ const findConversationForUser = async (conversationId, userId) => {
   return conversation;
 };
 
-const runChatTurn = async ({ conversation, userText, language, context, userId }) => {
+const runChatTurn = async ({ conversation, originalText, translatedText, language, context, userId }) => {
   const currentStep = conversation.step;
   const turnResult = await processChatTurn(
     currentStep,
-    userText,
+    originalText,
     conversation.messages,
     context,
     language || null
@@ -185,13 +185,15 @@ const runChatTurn = async ({ conversation, userText, language, context, userId }
   const normalizedValue = normalizeExtractedValue(currentStep, turnResult.extractedValue);
 
   if (currentStep === "mood") {
-    conversation.dailyMood = await analyzeMoodText(userText, {
-      language,
+    // Send the ENGLISH translation to the sentiment model for better accuracy
+    conversation.dailyMood = await analyzeMoodText(translatedText || originalText, {
+      language: "English", 
       sourceStep: "mood",
     });
   }
 
-  conversation.messages.push({ role: "user", text: userText });
+  // Save the user's ORIGINAL language in the history
+  conversation.messages.push({ role: "user", text: originalText });
 
   if (normalizedValue === null && STEP_CONFIG[currentStep]?.extract) {
     aiReply = MISSING_VALUE_REPLIES[currentStep] || aiReply;
@@ -204,6 +206,7 @@ const runChatTurn = async ({ conversation, userText, language, context, userId }
   conversation.step = nextStep;
 
   if (currentStep !== "done" && nextStep === "done") {
+    // Send the full English translation history for burnout calculation if needed
     await calculateAndSaveBurnout(conversation);
     await persistAutoSavedEarnings(userId, conversation.extractedData);
   }
@@ -227,8 +230,17 @@ const startChat = asyncHandler(async (req, res) => {
   const userId = req.user.userId;
   const user = await User.findById(userId).select("name");
   const lastDone = await Conversation.findOne({ userId, step: "done" }).sort({ createdAt: -1 });
-  const context = lastDone?.burnoutStatus ? { burnoutStatus: lastDone.burnoutStatus } : null;
+  
   const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+  const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
+  const vehicles = Array.isArray(req.body.vehicles) ? req.body.vehicles : [];
+
+  const context = {
+    ...(lastDone?.burnoutStatus ? { burnoutStatus: lastDone.burnoutStatus } : {}),
+    platforms,
+    vehicles
+  };
+
   const greeting = await generateGreeting(user?.name || "buddy", context, language || null);
 
   const conversation = await Conversation.create({
@@ -255,6 +267,11 @@ const reply = asyncHandler(async (req, res) => {
     const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
     const coordinates = parseCoordinates(req.body.lat, req.body.lon);
     const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+    
+    // Multipart fields come as strings. "Uber,Swiggy" -> ["Uber", "Swiggy"]
+    const platforms = typeof req.body.platforms === "string" ? req.body.platforms.split(",").filter(Boolean) : [];
+    const vehicles = typeof req.body.vehicles === "string" ? req.body.vehicles.split(",").filter(Boolean) : [];
+
     const conversation = await findConversationForUser(conversationId, req.user.userId);
 
     const weatherPromise = coordinates
@@ -264,12 +281,15 @@ const reply = asyncHandler(async (req, res) => {
         })
       : Promise.resolve(null);
 
-    const [transcription, weather] = await Promise.all([
+    const [transcriptionResult, weather] = await Promise.all([
       transcribeAudio(filePath),
       weatherPromise,
     ]);
 
-    if (typeof transcription !== "string" || transcription.trim().length === 0) {
+    const transcriptionOriginal = transcriptionResult?.originalText || "";
+    const transcriptionTranslated = transcriptionResult?.translatedText || "";
+
+    if (transcriptionOriginal.trim().length === 0) {
       return res.json({
         conversationId: conversation._id,
         transcription: "(No speech detected)",
@@ -284,15 +304,20 @@ const reply = asyncHandler(async (req, res) => {
 
     const { aiReply, nextStep } = await runChatTurn({
       conversation,
-      userText: transcription.trim(),
+      originalText: transcriptionOriginal.trim(),
+      translatedText: transcriptionTranslated.trim(),
       language,
-      context: weather ? { weather } : null,
+      context: { 
+        ...(weather ? { weather } : {}),
+        platforms,
+        vehicles
+      },
       userId: req.user.userId,
     });
 
     res.json({
       conversationId: conversation._id,
-      transcription: transcription.trim(),
+      transcription: transcriptionOriginal.trim(),
       reply: aiReply,
       step: nextStep,
       extractedData: conversation.extractedData,
@@ -309,13 +334,17 @@ const replyText = asyncHandler(async (req, res) => {
   const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
   const text = ensureNonEmptyString(req.body.text, "text");
   const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+  const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
+  const vehicles = Array.isArray(req.body.vehicles) ? req.body.vehicles : [];
+
   const conversation = await findConversationForUser(conversationId, req.user.userId);
 
   const { aiReply, nextStep } = await runChatTurn({
     conversation,
-    userText: text,
+    originalText: text,
+    translatedText: text, // No translation step in text-only fallback currently
     language,
-    context: null,
+    context: { platforms, vehicles },
     userId: req.user.userId,
   });
 

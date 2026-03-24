@@ -6,7 +6,13 @@ data class RegisterRequest(val name: String, val email: String, val password: St
 data class AuthResponse(val token: String, val user: UserData)
 data class UserData(val id: String, val name: String, val role: String)
 
-// ─── Chat models (mirrors server JSON) ────────────────────────────────────────
+// ─── Chat models (mirrors server JSON) ──────────────────────────────────────
+data class StartSessionRequest(
+    val language: String,
+    val platforms: List<String>,
+    val vehicles: List<String>
+)
+
 /** Response from POST /api/chat/start */
 data class StartSessionResponse(
     val conversationId: String,

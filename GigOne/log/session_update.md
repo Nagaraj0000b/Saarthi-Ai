@@ -1,23 +1,28 @@
-# Session Update - Voice Module & Error Handling
+# Session Update - Android UX & Backend Sync
 
 ## Changes Implemented
 
-1. **Speech Translation (Backend)**: 
-   - Integrated `@google-cloud/translate` in `server/services/speechService.js`.
-   - The service now automatically translates transcribed regional audio into English. 
-   - Added a fallback mechanism to return the raw transcription if the translation API fails.
+1. **Replaced openai-edge-tts with Google Cloud TTS**
+   - Removed dependency on local python TTS server.
+   - Built a custom `ttsService` in the Express backend using `@google-cloud/text-to-speech`.
+   - Android App `TtsPlayer` now securely fetches TTS blobs directly from the Express backend via JWT authorization.
 
-2. **Empty Audio/Silence Handling (Backend)**: 
-   - Updated `server/controllers/chatController.js` to handle empty transcriptions (e.g., when no speech is detected by GCP STT). 
-   - Instead of throwing a 502 `TRANSCRIPTION_EMPTY` AppError, it now returns a graceful conversational JSON response: `"(No speech detected)"` with an AI reply: `"I couldn't hear anything. Please try speaking again."`
+2. **Dual-Transcript Conversational Logic (Backend)**
+   - `speechService` now returns both the *Original Text* (e.g. Hindi/Tamil) and *Translated Text* (English).
+   - The AI generates natural, localized replies using the *Original Text*.
+   - The Sentiment and Burnout engines use the *Translated Text* for higher analytical accuracy.
 
-3. **Frontend Resilience (Client)**: 
-   - Added `try/catch` blocks in `client/src/hooks/useVoiceRecorder.js` to properly throw microphone permission errors.
-   - Updated `client/src/pages/user/DashBoard.jsx` to handle and display user-friendly UI error messages for:
-     - Microphone access denial.
-     - Session initialization failures.
-     - Voice processing and network errors (replacing the permanent "Processing voice..." loading state).
+3. **Android Swiggy-Style UX Overhaul**
+   - **Navigation:** Moved Profile to the top-right of the Dashboard. Added a new "Reports" tab to the bottom navigation.
+   - **Profile Screen:** Completely redesigned with a professional layout showing Name, Phone, and Email. Added dynamic settings sub-screens for Languages, Platforms, Vehicles, and Daily Target.
+   - **Dynamic Preferences:** Users can now search, add, and remove multiple Work Platforms, Vehicles, and Languages using a custom Search-and-Add component.
+   - **Theme Engine:** Integrated Dark Mode support.
 
-## Next Steps
+4. **New Android Screen: Weekly Reports**
+   - Created `ReportsScreen.kt` with a visual representation of total weekly earnings and platform-wise breakdown.
 
-- Make the conversational flow error proof.
+## TODOs / Next Steps
+
+- [ ] Investigate Android microphone upload failure ("Could not connect to server" during `sendAudioReply`).
+- [ ] Make the conversational flow error proof.
+- [ ] Fix profile details (Email and Phone number) saving issue (Persistence logic verified, needs UI testing).

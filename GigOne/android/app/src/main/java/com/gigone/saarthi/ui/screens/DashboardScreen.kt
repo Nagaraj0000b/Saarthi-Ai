@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -22,6 +23,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,13 +35,9 @@ import com.gigone.saarthi.ui.theme.AppColors
 import kotlinx.coroutines.launch
 
 /** Data class for a single check-in message. */
-data class ChatMessage(val role: String, val text: String)
+import com.gigone.saarthi.util.TokenManager
 
-/** Available languages — matches web client's LANGUAGE_VOICES keys. */
-private val LANGUAGES = listOf(
-    "English","Hindi","Kannada","Telugu","Tamil",
-    "Marathi","Malayalam","Bengali","Urdu","Gujarati"
-)
+data class ChatMessage(val role: String, val text: String)
 
 /**
  * DashboardScreen — fully wired to DashboardViewModel.
@@ -47,9 +45,16 @@ private val LANGUAGES = listOf(
  */
 @Composable
 fun DashboardScreen(
-    userName: String = "Worker",
-    vm: DashboardViewModel = viewModel()
+    vm: DashboardViewModel = viewModel(),
+    onProfileClick: () -> Unit = {}
 ) {
+    val ctx = LocalContext.current
+    val userName = TokenManager.getUserName(ctx)
+    
+    val LANGUAGES = remember { 
+        val prefs = TokenManager.getSelectedLanguages(ctx).toList().sorted()
+        if (prefs.isEmpty()) listOf("English", "Hindi") else prefs
+    }
     // ─── Collect state ───────────────────────────────────────────────────────
     val messages by vm.messages.collectAsStateWithLifecycle()
     val isProcessing by vm.isProcessing.collectAsStateWithLifecycle()
@@ -93,25 +98,15 @@ fun DashboardScreen(
                 .navigationBarsPadding() 
         ) {
 
-            // ── TOP HEADER (Greeting + Dropdown) ──────────────────────────────
+            // ── TOP HEADER ──────────────────────────────
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 24.dp)
-                    .padding(top = 0.dp, bottom = 4.dp), // Minimized padding to move it up
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Column {
-                    Text("Good Morning,", fontSize = 12.sp, color = AppColors.TextSecondary)
-                    Text(
-                        userName,
-                        fontSize = 18.sp,
-                        fontWeight = FontWeight.ExtraBold,
-                        color = AppColors.TextPrimary
-                    )
-                }
-                // Language selector pill
+                // Left: Language Pill
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = Color(0x0DFFFFFF),
@@ -120,9 +115,25 @@ fun DashboardScreen(
                     Text(
                         "🌐 $selectedLanguage ▼",
                         color = AppColors.Accent,
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
+
+                // Right: Profile Icon (Navigates to Swiggy-style Profile screen)
+                IconButton(
+                    onClick = onProfileClick,
+                    modifier = Modifier
+                        .size(42.dp)
+                        .clip(CircleShape)
+                        .background(Color(0x1A6C63FF))
+                ) {
+                    Icon(
+                        Icons.Default.Person,
+                        contentDescription = "Profile",
+                        tint = AppColors.Primary,
+                        modifier = Modifier.size(24.dp)
                     )
                 }
             }

@@ -7,6 +7,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.automirrored.filled.Chat
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -30,17 +31,16 @@ class MainActivity : ComponentActivity() {
     }
 }
 
-// --- Bottom tab definition ---
+// --- Bottom tab definition (removed Profile from bottom, Swiggy-style) ---
 data class TabItem(val route: String, val label: String, val icon: ImageVector)
 
 val tabs = listOf(
-    TabItem("chatbot", "Chatbot", Icons.Default.Chat),
+    TabItem("chatbot", "Saarthi", Icons.AutoMirrored.Filled.Chat),
     TabItem("earnings", "Earnings", Icons.Default.AccountBalanceWallet),
-    TabItem("worklogs", "Work Logs", Icons.Default.Description),
-    TabItem("more", "More", Icons.Default.MoreHoriz),
+    TabItem("worklogs", "History", Icons.Default.ReceiptLong),
 )
 
-// --- Root navigation: Auth → Main ---
+// --- Root navigation: Auth -> Main ---
 @Composable
 fun AppNavigation() {
     val context = LocalContext.current
@@ -76,37 +76,41 @@ fun AppNavigation() {
     }
 }
 
-// --- Main screen with bottom tabs ---
+// --- Main screen with bottom tabs and nested navigation ---
 @Composable
 fun MainScreen(onLogout: () -> Unit) {
-    val context = LocalContext.current
     val tabNav = rememberNavController()
     val backStackEntry by tabNav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Hide bottom bar on deep profile screens
+    val showBottomBar = currentRoute in tabs.map { it.route }
+
     Scaffold(
         bottomBar = {
-            NavigationBar(containerColor = AppColors.BgDeep, tonalElevation = 0.dp) {
-                tabs.forEach { tab ->
-                    NavigationBarItem(
-                        selected = currentRoute == tab.route,
-                        onClick = {
-                            tabNav.navigate(tab.route) {
-                                popUpTo(tabs[0].route) { saveState = true }
-                                launchSingleTop = true
-                                restoreState = true
-                            }
-                        },
-                        icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label, fontSize = 11.sp) },
-                        colors = NavigationBarItemDefaults.colors(
-                            selectedIconColor = AppColors.Accent,
-                            selectedTextColor = AppColors.Accent,
-                            unselectedIconColor = AppColors.TextMuted,
-                            unselectedTextColor = AppColors.TextMuted,
-                            indicatorColor = AppColors.BgDeep
+            if (showBottomBar) {
+                NavigationBar(containerColor = AppColors.BgDeep, tonalElevation = 0.dp) {
+                    tabs.forEach { tab ->
+                        NavigationBarItem(
+                            selected = currentRoute == tab.route,
+                            onClick = {
+                                tabNav.navigate(tab.route) {
+                                    popUpTo(tabs[0].route) { saveState = true }
+                                    launchSingleTop = true
+                                    restoreState = true
+                                }
+                            },
+                            icon = { Icon(tab.icon, contentDescription = tab.label) },
+                            label = { Text(tab.label, fontSize = 11.sp) },
+                            colors = NavigationBarItemDefaults.colors(
+                                selectedIconColor = AppColors.Primary,
+                                selectedTextColor = AppColors.Primary,
+                                unselectedIconColor = AppColors.TextMuted,
+                                unselectedTextColor = AppColors.TextMuted,
+                                indicatorColor = AppColors.BgDeep
+                            )
                         )
-                    )
+                    }
                 }
             }
         }
@@ -117,7 +121,7 @@ fun MainScreen(onLogout: () -> Unit) {
             modifier = Modifier.padding(padding)
         ) {
             composable("chatbot") {
-                DashboardScreen()
+                DashboardScreen(onProfileClick = { tabNav.navigate("profile") })
             }
             composable("earnings") {
                 EarningsScreen()
@@ -125,8 +129,31 @@ fun MainScreen(onLogout: () -> Unit) {
             composable("worklogs") {
                 WorkLogsScreen()
             }
-            composable("more") {
-                SettingsScreen(onLogout = onLogout)
+            
+            // --- Profile & Settings Screens ---
+            composable("profile") {
+                ProfileScreen(navController = tabNav, onLogout = onLogout)
+            }
+            composable("reports") {
+                ReportsScreen()
+            }
+            composable("edit_profile") {
+                EditProfileScreen(navController = tabNav)
+            }
+            composable("account_settings") {
+                AccountSettingsScreen(navController = tabNav, onLogout = onLogout)
+            }
+            composable("manage_languages") {
+                ManageLanguagesScreen(navController = tabNav)
+            }
+            composable("manage_platforms") {
+                ManagePlatformsScreen(navController = tabNav)
+            }
+            composable("manage_vehicles") {
+                ManageVehiclesScreen(navController = tabNav)
+            }
+            composable("manage_target") {
+                ManageTargetScreen(navController = tabNav)
             }
         }
     }
