@@ -6,9 +6,11 @@
 const fs = require("fs");
 const path = require("path");
 const speech = require("@google-cloud/speech");
+const { Translate } = require("@google-cloud/translate").v2;
 const AppError = require("../utils/appError");
 
 let speechClient;
+let translateClient;
 
 const getSpeechClient = () => {
   if (!speechClient) {
@@ -24,10 +26,23 @@ const getSpeechClient = () => {
   return speechClient;
 };
 
+const getTranslateClient = () => {
+  if (!translateClient) {
+    const keyFilename = path.join(__dirname, "..", "credential.json");
+    if (!fs.existsSync(keyFilename)) {
+      throw new AppError("Google Cloud credential.json not found in server root.", 500, {
+        code: "CONFIG_ERROR",
+      });
+    }
+    translateClient = new Translate({ keyFilename });
+  }
+  return translateClient;
+};
+
 /**
- * Transcribes a local audio file using Google Cloud Speech-to-Text.
+ * Transcribes a local audio file using Google Cloud Speech-to-Text and translates to English.
  * @param {string} filePath - The absolute path to the audio file.
- * @returns {Promise<string>} The transcribed text.
+ * @returns {Promise<string>} The transcribed and translated text.
  */
 const transcribeAudio = async (filePath) => {
   if (typeof filePath !== "string" || filePath.trim().length === 0) {
@@ -76,7 +91,18 @@ const transcribeAudio = async (filePath) => {
       return "";
     }
 
-    return transcription.trim();
+    const transcribedText = transcription.trim();
+
+    try {
+      // Translate the transcribed text to English
+      const tClient = getTranslateClient();
+      const [translation] = await tClient.translate(transcribedText, 'en');
+      return translation;
+    } catch (translateError) {
+      console.error("[GCP Translate Error]:", translateError);
+      // Fallback to transcribed text if translation fails
+      return transcribedText;
+    }
 
   } catch (error) {
     console.error("[GCP STT Error]:", error);

@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TTS Test Page</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; background-color: #1a1a1a; color: white; }
+        textarea { width: 100%; height: 100px; margin-bottom: 10px; background: #333; color: white; border: 1px solid #555; padding: 10px;}
+        button { padding: 10px 20px; background-color: #00d4aa; color: black; border: none; cursor: pointer; font-weight: bold; }
+        #status { margin-top: 20px; color: #ff6b6b; }
+        audio { margin-top: 20px; width: 100%; }
+    </style>
+</head>
+<body>
+    <h1>Google Cloud TTS Integration Test</h1>
+    
+    <label>Text to speak:</label>
+    <textarea id="textInput">Namaste. This is a test of the Google Cloud Text to Speech integration on the GigOne backend.</textarea>
+    
+    <label>Language:</label>
+    <select id="langInput" style="margin-bottom: 20px; padding: 5px;">
+        <option value="English">English</option>
+        <option value="Hindi">Hindi</option>
+        <option value="Tamil">Tamil</option>
+    </select>
+    <br>
+
+    <button onclick="testTTS()">Generate Audio</button>
+
+    <div id="status"></div>
+    <audio id="audioPlayer" controls></audio>
+
+    <script>
+        // Generated valid JWT token for testing
+        const TEST_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VySWQiOiJ0ZXN0X3VzZXJfMTIzIiwiaWF0IjoxNzc0MzcxOTkxLCJleHAiOjE3NzQzNzU1OTF9.o9wSRyd0vp7smFLtdH2GVww2afviPkEVSDb5UH1r168";
+
+        async function testTTS() {
+            const statusEl = document.getElementById('status');
+            const audioPlayer = document.getElementById('audioPlayer');
+            const text = document.getElementById('textInput').value;
+            const language = document.getElementById('langInput').value;
+
+            statusEl.innerText = "Requesting audio...";
+            statusEl.style.color = "yellow";
+            
+            // Clean up previous blob if it exists
+            if (audioPlayer.src) {
+                URL.revokeObjectURL(audioPlayer.src);
+                audioPlayer.src = "";
+            }
+
+            try {
+                const response = await fetch("http://localhost:5000/api/tts", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                        "Authorization": `Bearer ${TEST_TOKEN}`
+                    },
+                    body: JSON.stringify({ text, language })
+                });
+
+                if (!response.ok) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(`Server returned ${response.status}: ${errData.message || response.statusText}`);
+                }
+
+                // Check headers
+                const contentType = response.headers.get("Content-Type");
+                console.log("Response Content-Type:", contentType);
+
+                // Convert response to a blob
+                const blob = await response.blob();
+                console.log("Blob size:", blob.size, "bytes");
+
+                if (blob.size < 100) {
+                     throw new Error("Received Blob is too small to be audio! It might be a hidden JSON error.");
+                }
+
+                // Create local URL for the blob
+                const audioUrl = URL.createObjectURL(blob);
+                
+                // Play it
+                audioPlayer.src = audioUrl;
+                audioPlayer.play();
+
+                statusEl.innerText = "Audio loaded and playing!";
+                statusEl.style.color = "#00d4aa";
+
+            } catch (error) {
+                console.error(error);
+                statusEl.innerText = "Error: " + error.message;
+                statusEl.style.color = "#ff6b6b";
+            }
+        }
+    </script>
+</body>
+</html>

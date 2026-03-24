@@ -270,8 +270,15 @@ const reply = asyncHandler(async (req, res) => {
     ]);
 
     if (typeof transcription !== "string" || transcription.trim().length === 0) {
-      throw new AppError("Audio transcription was empty", 502, {
-        code: "TRANSCRIPTION_EMPTY",
+      return res.json({
+        conversationId: conversation._id,
+        transcription: "(No speech detected)",
+        reply: "I couldn't hear anything. Please try speaking again.",
+        step: conversation.step,
+        extractedData: conversation.extractedData,
+        burnoutStatus: conversation.burnoutStatus,
+        wellbeingRisk: conversation.wellbeingRisk,
+        isComplete: false,
       });
     }
 

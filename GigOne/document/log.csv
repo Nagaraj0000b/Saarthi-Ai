@@ -1,3 +1,0 @@
-Timestamp,File Path,Description,Main Code Concepts,Testing Code
-2026-03-13T13:23:00+05:30,server/services/conversationService.js,Gemini-powered conversational reply engine — generates empathetic Hinglish replies from user transcript + sentiment + context,"@google/generative-ai SDK; prompt engineering; context window management (.slice(-6)); optional weather/traffic injection",None yet — tested via POST /api/chat/chat
-2026-03-13T20:44:00+05:30,server/models/Conversation.js,MongoDB schema for conversation history — stores messages per user with role/text/sentiment,"Sub-document schema (messageSchema); ObjectId ref to User; index on userId; timestamps on both levels",None yet — tested via chat controller

@@ -1,0 +1,2 @@
+// mobile/src/services/api.ts
+export const API_URL = 'http://10.159.172.120:5000/api';

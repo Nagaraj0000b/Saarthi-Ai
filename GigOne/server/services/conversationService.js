@@ -11,7 +11,7 @@ let model;
 const getModel = () => {
   if (!model) {
     const genAI = new GoogleGenerativeAI(requireEnv("GEMINI_API_KEY"));
-    model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+    model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
   }
 
   return model;

@@ -16,6 +16,8 @@ dotenv.config({ path: path.join(__dirname, ".env") });
 
 require("./config/passport");
 
+const ttsRoutes = require("./routes/tts");
+
 const app = express();
 
 app.use(cors());
@@ -26,6 +28,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/earnings", require("./routes/earnings"));
 app.use("/api/worklogs", require("./routes/worklogs"));
 app.use("/api/chat", require("./routes/chat"));
+app.use("/api/tts", ttsRoutes);
 
 app.get("/", (req, res) => {
   res.json({ message: "GigOne API is running" });
