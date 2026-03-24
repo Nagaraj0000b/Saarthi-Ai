@@ -1,72 +1,79 @@
 /**
  * @fileoverview Passport configuration for Google OAuth 2.0 authentication.
- * Manages the strategy implementation, user lookup/creation, and session-less serialization.
- * 
- * @module server/config/passport
- * @requires passport
- * @requires passport-google-oauth20
- * @requires ../models/User
  */
 
 const passport = require("passport");
 const GoogleStrategy = require("passport-google-oauth20").Strategy;
 const User = require("../models/User");
+const AppError = require("../utils/appError");
 
-/**
- * Google OAuth 2.0 Strategy Configuration
- * 
- * Defines the logic for verifying users authenticated via Google. 
- * Maps Google profile data to the internal User model and handles JIT (Just-In-Time) provisioning.
- */
-passport.use(
-  new GoogleStrategy(
-    {
-      clientID: process.env.GOOGLE_CLIENT_ID,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET,
-      callbackURL: "/api/auth/google/callback",
-    },
-    async (accessToken, refreshToken, profile, done) => {
-      try {
-        // Search for existing user by email to prevent duplicate accounts
-        let user = await User.findOne({ email: profile.emails[0].value });
-        
-        if (user) {
-          // Sync Google ID if it's the first time this existing local user is using OAuth
-          if (!user.googleId) {
-            user.googleId = profile.id;
-            await user.save();
-          }
-          return done(null, user);
-        }
-
-        // Provision a new user if no match is found
-        user = await User.create({
-          name: profile.displayName,
-          email: profile.emails[0].value,
-          googleId: profile.id,
-          // Placeholder hash for OAuth users to satisfy schema constraints without exposing local auth
-          passwordHash: "google_oauth_no_password", 
-        });
-
-        done(null, user);
-      } catch (err) {
-        done(err, null);
-      }
-    }
-  )
+const googleOAuthEnabled = Boolean(
+  process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET
 );
 
-/**
- * Serialization Logic
- * Since the application uses stateless JWTs, these are minimal implementations 
- * to satisfy Passport's internal requirements.
- */
+if (googleOAuthEnabled) {
+  passport.use(
+    new GoogleStrategy(
+      {
+        clientID: process.env.GOOGLE_CLIENT_ID,
+        clientSecret: process.env.GOOGLE_CLIENT_SECRET,
+        callbackURL: "/api/auth/google/callback",
+      },
+      async (accessToken, refreshToken, profile, done) => {
+        try {
+          const email = profile?.emails?.[0]?.value;
+
+          if (!email) {
+            done(
+              new AppError("Google account email is unavailable", 400, {
+                code: "OAUTH_PROFILE_INVALID",
+              }),
+              null
+            );
+            return;
+          }
+
+          let user = await User.findOne({ email });
+
+          if (user) {
+            if (!user.googleId) {
+              user.googleId = profile.id;
+              await user.save();
+            }
+
+            done(null, user);
+            return;
+          }
+
+          user = await User.create({
+            name: profile.displayName,
+            email,
+            googleId: profile.id,
+            passwordHash: "google_oauth_no_password",
+          });
+
+          done(null, user);
+        } catch (error) {
+          done(error, null);
+        }
+      }
+    )
+  );
+} else {
+  console.warn("Google OAuth credentials are missing. Google login routes are disabled.");
+}
+
 passport.serializeUser((user, done) => {
   done(null, user.id);
 });
 
-passport.deserializeUser((id, done) => {
-  User.findById(id, (err, user) => done(err, user));
+passport.deserializeUser(async (id, done) => {
+  try {
+    const user = await User.findById(id);
+    done(null, user);
+  } catch (error) {
+    done(error, null);
+  }
 });
 
-module.exports = passport;
+module.exports = { googleOAuthEnabled };

@@ -1,21 +1,22 @@
 /**
- * @fileoverview Step-aware Conversational AI Engine.
- * Implements a structured check-in workflow for gig workers, guiding them through 
- * mood assessment, platform identification, earnings reporting, and time tracking.
- * 
- * @module server/services/conversationService
- * @requires @google/generative-ai
+ * @fileoverview Step-aware conversational AI engine.
  */
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const AppError = require("../utils/appError");
+const { requireEnv } = require("../utils/env");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+let model;
 
-/**
- * Workflow Configuration
- * Defines the progression and goals of each conversational step.
- */
+const getModel = () => {
+  if (!model) {
+    const genAI = new GoogleGenerativeAI(requireEnv("GEMINI_API_KEY"));
+    model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+  }
+
+  return model;
+};
+
 const STEP_CONFIG = {
   greeting: {
     goal: "Greet the worker warmly. Ask how their day was. Be casual and friendly.",
@@ -30,52 +31,45 @@ const STEP_CONFIG = {
   platform: {
     goal: "Acknowledge the platform. Ask for today's total earnings.",
     nextStep: "earnings",
-    extract: "platform", 
+    extract: "platform",
   },
   earnings: {
     goal: "React to earnings. Ask for the total hours worked.",
     nextStep: "hours",
-    extract: "earnings", 
+    extract: "earnings",
   },
   hours: {
-    goal: "Wrap up. Provide a summary and a smart suggestion based on weather/traffic.",
-    nextStep: "summary",
-    extract: "hours", 
-  },
-  summary: {
-    goal: "Motivational closing. Check-in complete.",
+    goal: "Wrap up. React to hours. Provide a short summary, a smart suggestion based on weather/traffic, and a motivational closing. Check-in is now complete.",
     nextStep: "done",
-    extract: null,
+    extract: "hours",
   },
 };
 
-/**
- * Generates an initial greeting message for a check-in session.
- * 
- * @async
- * @function generateGreeting
- * @param {string} [userName="buddy"] - The user's name for personalization.
- * @param {Object} [context=null] - Optional real-time environmental context.
- * @returns {Promise<string>} Personalized greeting text.
- */
-const generateGreeting = async (userName = "buddy", context = null) => {
+const generateGreeting = async (userName = "buddy", context = null, language = null) => {
   let contextBlock = "";
   if (context?.weather?.current) {
-    const w = context.weather.current;
-    contextBlock += `\nCurrent weather: ${w.condition}, ${w.temp}°C.`;
+    const weather = context.weather.current;
+    contextBlock += `\nCurrent weather: ${weather.condition}, ${weather.temp}C.`;
   }
-  
+
   if (context?.burnoutStatus) {
     if (context.burnoutStatus.isBurnoutAlert) {
-      contextBlock += `\nURGENT HEALTH ALERT: The worker has worked 3 consecutive stressful days and is facing severe burnout. You MUST politely but firmly suggest they take a rest day today before you ask about their day.`;
+      contextBlock +=
+        "\nURGENT HEALTH ALERT: The worker has worked 3 consecutive stressful days and is facing severe burnout. You MUST politely but firmly suggest they take a rest day today before you ask about their day.";
     } else if (context.burnoutStatus.isStressWarning) {
-      contextBlock += `\nHEALTH NOTE: The worker is experiencing high stress this week. Warmly remind them to take it easy today and not overwork.`;
+      contextBlock +=
+        "\nHEALTH NOTE: The worker is experiencing high stress this week. Warmly remind them to take it easy today and not overwork.";
     }
   }
 
+  const languageRule =
+    language && language !== "English"
+      ? `LANGUAGE RULE: You MUST reply ONLY in ${language}. Do NOT use English or Hinglish. Respond entirely in ${language}.`
+      : "Personality: warm, supportive, casual Hinglish (Hindi + English mix).";
+
   const prompt = `
 You are an AI companion for Indian gig economy workers.
-Personality: warm, supportive, casual Hinglish (Hindi + English mix).
+${languageRule}
 ${contextBlock}
 
 The worker's name is "${userName}".
@@ -89,29 +83,28 @@ CRITICAL RULES:
 - Return ONLY the greeting text.
   `.trim();
 
-  const result = await model.generateContent(prompt);
-  return result.response.text().trim();
+  try {
+    const result = await getModel().generateContent(prompt);
+    return result.response.text().trim();
+  } catch (error) {
+    throw new AppError("Unable to start chat right now", 502, {
+      code: "AI_SERVICE_ERROR",
+      expose: false,
+      cause: error,
+    });
+  }
 };
 
-/**
- * Executes a unified conversational turn using Gemini.
- * Performs sentiment analysis, response generation, and data extraction in a single LLM pass
- * to minimize latency and ensure state consistency.
- * 
- * @async
- * @function processChatTurn
- * @param {string} currentStep - The current state in the check-in workflow.
- * @param {string} userText - The transcribed text from the worker.
- * @param {Array<Object>} [recentMessages=[]] - Conversation history for context.
- * @param {Object} [context=null] - Environmental context (weather/traffic).
- * @returns {Promise<Object>} Unified response object containing sentiment, reply, and extracted value.
- */
-const processChatTurn = async (currentStep, userText, recentMessages = [], context = null) => {
+const processChatTurn = async (
+  currentStep,
+  userText,
+  recentMessages = [],
+  context = null,
+  language = null
+) => {
   const stepConfig = STEP_CONFIG[currentStep];
   if (!stepConfig) {
-    // Conversation is already complete — return a friendly wrap-up instead of crashing
     return {
-      sentiment: { mood: "neutral", score: 0, summary: "Check-in complete.", suggestion: "Rest well!" },
       reply: "Aaj ka check-in ho chuka hai! Naya check-in shuru karne ke liye mic button dabao.",
       extractedValue: null,
     };
@@ -119,24 +112,28 @@ const processChatTurn = async (currentStep, userText, recentMessages = [], conte
 
   const historyBlock = recentMessages
     .slice(-6)
-    .map((m) => `${m.role === "user" ? "Worker" : "Assistant"}: ${m.text}`)
+    .map((message) => `${message.role === "user" ? "Worker" : "Assistant"}: ${message.text}`)
     .join("\n");
 
   let contextBlock = "";
-  if (context) {
-    if (context.weather?.current) {
-      const w = context.weather.current;
-      contextBlock += `\nWeather: ${w.condition}, ${w.temp}°C.`;
-    }
-    if (context.traffic) {
-      const t = context.traffic;
-      contextBlock += `\nTraffic: ${t.traffic_level} (${t.congestion_percent}% congestion).`;
-    }
+  if (context?.weather?.current) {
+    const weather = context.weather.current;
+    contextBlock += `\nWeather: ${weather.condition}, ${weather.temp}C.`;
   }
+
+  if (context?.traffic) {
+    const traffic = context.traffic;
+    contextBlock += `\nTraffic: ${traffic.traffic_level} (${traffic.congestion_percent}% congestion).`;
+  }
+
+  const languageRule =
+    language && language !== "English"
+      ? `LANGUAGE RULE: You MUST reply ONLY in ${language}. Do NOT use English or Hinglish. All text in the "reply" field MUST be in ${language}. Short sentences. No emojis.`
+      : "Personality: Warm, supportive, casual Hinglish. Short sentences (1-2 max). No emojis.";
 
   const prompt = `
 You are an AI companion for Indian gig economy workers.
-Personality: Warm, supportive, casual Hinglish. Short sentences (1-2 max). No emojis.
+${languageRule}
 
 Context:
 ${contextBlock}
@@ -152,56 +149,66 @@ CRITICAL EXTRACTION RULE for "${stepConfig.extract}":
 - ONLY extract "${stepConfig.extract}" if the worker EXPLICITLY mentioned it in their latest message.
 - NEVER guess, assume, or infer "${stepConfig.extract}" from your own previous questions or conversation history.
 - If the worker did NOT clearly provide "${stepConfig.extract}", you MUST set "extractedValue" to null.
-- When "extractedValue" is null, your reply MUST be a friendly apology like "Sorry, woh thoda miss ho gaya. Kya aap bata sakte ho [the question]?" — re-ask for the missing info naturally.
+- When "extractedValue" is null, your reply MUST be a friendly apology like "Sorry, woh thoda miss ho gaya. Kya aap bata sakte ho [the question]?" and re-ask for the missing info naturally.
 - Do NOT move forward to the next topic until the worker answers.
-` : ''}
+- ALWAYS extract numbers as pure digits (e.g., return 2 instead of "two" or "Two hours"). DO NOT include units like "hours" or "rupees".
+` : ""}
 
 Return ONLY a JSON object:
 {
-  "sentiment": {
-    "mood": "happy|neutral|stressed|frustrated|tired|excited",
-    "score": <number -1.0 to 1.0>,
-    "summary": "1 sentence emotion summary",
-    "suggestion": "1 short tip"
-  },
   "reply": "Hinglish response",
-  "extractedValue": <extracted ${stepConfig.extract || 'null'} or null>
+  "extractedValue": <extracted ${stepConfig.extract || "null"} or null>
 }
   `.trim();
 
-  const result = await model.generateContent(prompt);
-  let raw = result.response.text().trim();
+  let raw;
+  try {
+    const result = await getModel().generateContent(prompt);
+    raw = result.response.text().trim();
+  } catch (error) {
+    throw new AppError("AI conversation service is temporarily unavailable", 502, {
+      code: "AI_SERVICE_ERROR",
+      expose: false,
+      cause: error,
+    });
+  }
 
-  // Robust JSON parsing with markdown stripping
-  raw = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "").trim();
+  raw = raw.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
 
   try {
-    return JSON.parse(raw);
-  } catch (err) {
-    console.error("Gemini JSON parse failure:", err, raw);
+    const parsed = JSON.parse(raw);
+
+    if (currentStep === "platform" && parsed.extractedValue) {
+      const normalized =
+        String(parsed.extractedValue).charAt(0).toUpperCase() +
+        String(parsed.extractedValue).slice(1).toLowerCase();
+      const validPlatforms = ["Uber", "Swiggy", "Rapido", "Other"];
+
+      if (!validPlatforms.includes(normalized)) {
+        parsed.extractedValue = null;
+        parsed.reply =
+          "Main theek se samajh nahi paaya ki aapne aaj kis platform par kaam kiya. Kya aap dobara bata sakte hain? (Uber, Swiggy, Rapido ya Other?)";
+      } else {
+        parsed.extractedValue = normalized;
+      }
+    }
+
+    return parsed;
+  } catch (error) {
+    console.warn("AI chat turn returned invalid JSON. Falling back to retry prompt.");
     return {
-      sentiment: { mood: "neutral", score: 0, summary: "Processing...", suggestion: "Keep going!" },
-      reply: "Got it, tell me more.",
-      extractedValue: null
+      reply: "Sorry, woh thoda miss ho gaya. Kya aap ek baar dobara bata sakte ho?",
+      extractedValue: null,
     };
   }
 };
 
-/**
- * Determines the logical next step in the workflow state machine.
- * Stays on the current step if required extraction data is missing.
- * 
- * @function getNextStep
- * @param {string} currentStep - Current workflow state.
- * @param {any} extractedValue - The value extracted in the current turn.
- * @returns {string} Next workflow state.
- */
 const getNextStep = (currentStep, extractedValue = null) => {
   const stepConfig = STEP_CONFIG[currentStep];
   if (stepConfig?.extract && (extractedValue === null || extractedValue === undefined)) {
-    // Stay on the current step until the required data is provided
     return currentStep;
   }
+
   return stepConfig?.nextStep || "done";
 };
 

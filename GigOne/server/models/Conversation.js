@@ -62,14 +62,41 @@ const conversationSchema = new mongoose.Schema({
     hours:    Number,     // e.g., 5
   },
   /**
-   * Burnout Assessment
-   * Calculated automatically when the check-in conversation is completed.
+   * Wellbeing Risk Assessment
+   * Calculated automatically when the check-in conversation is completed,
+   * combining emotional strain, workload intensity, and lack of recovery.
+   */
+  wellbeingRisk: {
+    riskLevel: String,         // "low", "moderate", "high"
+    riskScore: Number,         // 0 to 100
+    emotionScore: Number,      // 0 to 100
+    workloadScore: Number,     // 0 to 100
+    recoveryScore: Number,     // 0 to 100
+    reasons: [String],         // ["Ongoing negative mood", "High workload"]
+    recommendedAction: String, // "suggest rest", etc.
+    isReliable: Boolean,       // true if enough historical data was evaluated
+  },
+  /**
+   * LEGACY Burnout Assessment 
+   * Maintained temporarily for backward compatibility with frontend clients.
    */
   burnoutStatus: {
     isBurnoutAlert:  Boolean,
     isStressWarning: Boolean,
     averageScore:    Number,
     action:          String,
+  },
+  /**
+   * Verified daily sentiment measurement.
+   */
+  dailyMood: {
+    moodLabel: String,
+    moodScore: Number,
+    summary: String,
+    suggestion: String,
+    confidence: Number,
+    isValid: Boolean,
+    sourceStep: String,
   },
   messages: [messageSchema],
 }, { timestamps: true });

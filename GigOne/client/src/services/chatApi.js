@@ -53,11 +53,33 @@ export const chatApi = {
   },
 
   /**
+   * Fetches completed conversational check-ins (Work Logs).
+   * @async
+   */
+  getHistory: async () => {
+    const res = await axios.get(`${API_URL}/chat/history`, {
+      headers: getHeaders()
+    });
+    return res.data;
+  },
+
+  /**
    * Initializes a new check-in session.
    * @async
    */
-  startSession: async () => {
-    const res = await axios.post(`${API_URL}/chat/start`, {}, {
+  startSession: async (language = null) => {
+    const res = await axios.post(`${API_URL}/chat/start`, { language }, {
+      headers: getHeaders()
+    });
+    return res.data;
+  },
+
+  /**
+   * Deletes a check-in conversation entirely.
+   * @async
+   */
+  deleteSession: async (id) => {
+    const res = await axios.delete(`${API_URL}/chat/${id}`, {
       headers: getHeaders()
     });
     return res.data;
@@ -68,13 +90,16 @@ export const chatApi = {
    * Uses multipart/form-data for efficient binary transmission.
    * @async
    */
-  sendAudioReply: async (audioBlob, conversationId, lat = null, lon = null) => {
+  sendAudioReply: async (audioBlob, conversationId, lat = null, lon = null, language = null) => {
     const formData = new FormData();
     formData.append("audio", audioBlob, "recording.webm");
     formData.append("conversationId", conversationId);
     if (lat && lon) {
       formData.append("lat", lat);
       formData.append("lon", lon);
+    }
+    if (language) {
+      formData.append("language", language);
     }
 
     const res = await axios.post(`${API_URL}/chat/reply`, formData, {
@@ -91,7 +116,7 @@ export const chatApi = {
    * Proxying via the openai-edge-tts local server.
    * @async
    */
-  synthesizeSpeech: async (text) => {
+  synthesizeSpeech: async (text, voice = "en-IN-NeerjaNeural") => {
     const response = await fetch(`${TTS_URL}/v1/audio/speech`, {
       method: "POST",
       headers: {
@@ -100,7 +125,7 @@ export const chatApi = {
       },
       body: JSON.stringify({
         input: text,
-        voice: "en-IN-NeerjaNeural",
+        voice: voice,
         response_format: "mp3",
         speed: 1.25,
       }),

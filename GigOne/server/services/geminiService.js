@@ -1,25 +1,27 @@
 /**
- * @fileoverview Gemini AI Service for standalone natural language processing tasks.
- * Primarily handles granular sentiment analysis and emotional intelligence logic.
- * 
- * @module server/services/geminiService
- * @requires @google/generative-ai
+ * @fileoverview Gemini AI service for standalone natural language processing tasks.
  */
 
 const { GoogleGenerativeAI } = require("@google/generative-ai");
+const AppError = require("../utils/appError");
+const { requireEnv } = require("../utils/env");
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY);
-const model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+let model;
 
-/**
- * Analyzes the sentiment and emotional state of a worker's input.
- * 
- * @async
- * @function analyzeSentiment
- * @param {string} text - The natural language input from the worker.
- * @returns {Promise<Object>} Structured sentiment data (mood, score, summary, suggestion).
- */
+const getModel = () => {
+  if (!model) {
+    const genAI = new GoogleGenerativeAI(requireEnv("GEMINI_API_KEY"));
+    model = genAI.getGenerativeModel({ model: "gemini-3.1-flash-lite-preview" });
+  }
+
+  return model;
+};
+
 const analyzeSentiment = async (text) => {
+  if (typeof text !== "string" || text.trim().length === 0) {
+    throw new AppError("text is required", 400, { code: "VALIDATION_ERROR" });
+  }
+
   const prompt = `
 You are an emotional intelligence engine for a gig worker companion app.
 Analyze the following text and return a JSON object with:
@@ -29,12 +31,29 @@ Analyze the following text and return a JSON object with:
 4. "suggestion" (1 actionable tip)
 
 Text: "${text}"
-  `;
+  `.trim();
 
-  const result = await model.generateContent(prompt);
-  const raw = result.response.text().trim();
-  const cleaned = raw.replace(/^```json\n?/, "").replace(/\n?```$/, "");
-  return JSON.parse(cleaned);
+  let cleaned;
+  try {
+    const result = await getModel().generateContent(prompt);
+    cleaned = result.response.text().trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+  } catch (error) {
+    throw new AppError("Sentiment analysis is temporarily unavailable", 502, {
+      code: "AI_SERVICE_ERROR",
+      expose: false,
+      cause: error,
+    });
+  }
+
+  try {
+    return JSON.parse(cleaned);
+  } catch (error) {
+    throw new AppError("Sentiment analysis returned invalid data", 502, {
+      code: "AI_INVALID_RESPONSE",
+      expose: false,
+      cause: error,
+    });
+  }
 };
 
 module.exports = { analyzeSentiment };

@@ -8,6 +8,7 @@ This file contains detailed documentation for files we work on. As changes are m
 
 ---
 
+
 ## 1. `server/services/chatbotConversationService.js` — Chatbot Conversational Reply Engine
 
 **Created:** 2026-03-13

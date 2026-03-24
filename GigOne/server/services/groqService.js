@@ -1,38 +1,48 @@
 /**
- * @fileoverview Groq Service for high-performance audio-to-text transcription.
- * Utilizes the Whisper-large-v3 model via Groq's LPUs for near-instant latency.
- * 
- * @module server/services/groqService
- * @requires groq-sdk
- * @requires fs
+ * @fileoverview Groq service for high-performance audio-to-text transcription.
  */
 
+const fs = require("fs");
 const Groq = require("groq-sdk");
-const fs   = require("fs");
+const AppError = require("../utils/appError");
+const { requireEnv } = require("../utils/env");
 
-const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
+let groqClient;
 
-/**
- * Transcribes an audio file into text using OpenAI's Whisper model.
- * 
- * @async
- * @function transcribeAudio
- * @param {string} filePath - Local path to the recorded audio file.
- * @returns {Promise<string>} Transcribed text content.
- */
+const getGroqClient = () => {
+  if (!groqClient) {
+    groqClient = new Groq({ apiKey: requireEnv("GROQ_API_KEY") });
+  }
+
+  return groqClient;
+};
+
 const transcribeAudio = async (filePath) => {
+  if (typeof filePath !== "string" || filePath.trim().length === 0) {
+    throw new AppError("Audio file path is required", 400, { code: "VALIDATION_ERROR" });
+  }
+
   try {
-    const transcription = await groq.audio.translations.create({
+    await fs.promises.access(filePath);
+
+    const transcription = await getGroqClient().audio.translations.create({
       file: fs.createReadStream(filePath),
       model: "whisper-large-v3",
       response_format: "text",
-      temperature: 0.2, // Low temperature for higher transcription accuracy
+      temperature: 0.2,
     });
 
-    return transcription; 
-  } catch (err) {
-    console.error("Groq transcription error:", err);
-    throw new Error("Failed to transcribe audio.");
+    return typeof transcription === "string" ? transcription.trim() : String(transcription || "").trim();
+  } catch (error) {
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    throw new AppError("Audio transcription service is unavailable", 502, {
+      code: "TRANSCRIPTION_ERROR",
+      expose: false,
+      cause: error,
+    });
   }
 };
 

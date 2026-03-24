@@ -1,0 +1,10 @@
+# Conversation Service
+
+`server/services/conversationService.js` drives each voice check-in turn and enforces the fixed conversational state machine that keeps the AI focused on collecting earnings data while watching the worker's mood.
+
+- `STEP_CONFIG` (lines 32‑70) defines each workflow state (`greeting`, `mood`, `platform`, `earnings`, `hours`, `done`), the goal sentence sent to Gemini, whether Gemini must extract a value, and the next step. This structure lets controllers stay in a step until the AI provides the required data and prevents the chat from drifting off-topic.  
+- `generateGreeting` (lines 72‑112) personalizes the opener by injecting the worker’s name plus optional weather/burnout context (city weather, whether the worker is in a burnout alert/stress warning). It then asks Gemini for a short Hinglish greeting and returns that assistant message to populate the first conversation turn.  
+- `processChatTurn` (lines 114‑210) handles every user reply (voice transcript or text fallback). It builds a prompt containing the recent six messages, any weather/traffic context, the worker’s latest text, and strict extraction rules for the current step. The Gemini call returns a single JSON blob with sentiment metrics, the assistant reply, and the extracted value (platform, earnings, or hours). After parsing, the service normalizes platforms against the allowed enum (`Uber`, `Swiggy`, `Rapido`, `Other`), rewrites the assistant reply if Gemini hallucinated unsupported data, and falls back to a neutral response if the JSON parsing fails.  
+- `getNextStep` (lines 212‑220) determines whether to transition to the next state or stay put: if the current step required an extraction and `extractedValue` is `null`, it returns the current step again; otherwise it outputs the configured `nextStep` or `done` when the workflow completes.
+
+`chatController` uses this service for `startChat`, for both the `/reply` (with audio) and `/reply-text` handlers, and to decide when the conversation has collected enough structured earnings/hours data to auto-save it after the `done` transition.

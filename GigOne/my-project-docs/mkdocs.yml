@@ -29,17 +29,45 @@ nav:
   - Architecture:
     - System Overview: architecture/overview.md
     - Tech Stack: architecture/stack.md
+    - Platform Recommendation Framework: architecture/platform-recommendation-framework.md
+    - Platform Recommendation Design: architecture/platform-recommendation-design.md
+    - Platform Recommendation Architecture: architecture/platform-recommendation-architecture.md
+    - Sentiment & Wellbeing Framework: architecture/sentiment-wellbeing-framework.md
+    - Sentiment Module Architecture: architecture/sentiment-module-architecture.md
+    - Wellbeing Risk Architecture: architecture/wellbeing-risk-architecture.md
   - Server API:
     - Overview: server/index.md
     - Authentication: server/auth.md
     - Chat & AI: server/chat.md
     - Earnings & WorkLogs: server/data.md
-    - Services: server/services.md
+    - Services:
+      - Overview: server/services.md
+      - Burnout Service: server/services/burnout-service.md
+      - Conversation Service: server/services/conversation-service.md
+      - Gemini Service: server/services/gemini-service.md
+      - Groq Service: server/services/groq-service.md
+      - Traffic Service: server/services/traffic-service.md
+      - Weather Service: server/services/weather-service.md
+    - Routes:
+      - Auth: server/routes/auth-route.md
+      - Chat: server/routes/chat-route.md
+      - Earnings: server/routes/earnings-route.md
+      - Worklogs: server/routes/worklogs-route.md
+    - Controllers:
+      - Auth Controller: server/controllers/auth-controller.md
+      - Chat Controller: server/controllers/chat-controller.md
+      - Earnings Controller: server/controllers/earnings-controller.md
+      - WorkLogs Controller: server/controllers/worklogs-controller.md
+    - Models: server/models.md
+    - Config: server/config.md
+    - Voice Module Overview: server/voice-module.md
+    - Voice Module Deep Dive: server/voice-module-deep.md
   - Client App:
     - Overview: client/index.md
     - Components: client/components.md
     - Pages: client/pages.md
     - Hooks & Utilities: client/hooks.md
+    - OpenAI Edge TTS: client/openai-edge-tts.md
   - Development:
     - Setup Guide: dev/setup.md
     - Testing: dev/testing.md

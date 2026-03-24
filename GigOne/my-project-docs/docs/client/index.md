@@ -14,7 +14,7 @@ client/src/
 │   ├── admin/         # Admin dashboard views
 │   ├── auth/          # SignIn and SignUp pages
 │   └── user/          # Worker dashboard and feature pages
-├── services/          # Domain-specific API wrappers (chatApi)
+├── services/          # Domain-specific API wrappers (chatApi, earningsApi, worklogsApi)
 ├── App.jsx            # Main router configuration
 └── main.jsx           # Entry point
 ```

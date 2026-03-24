@@ -23,6 +23,7 @@ import { useState, useEffect, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { useVoiceRecorder } from "../../hooks/useVoiceRecorder";
 import { chatApi } from "../../services/chatApi";
+import { earningsApi } from "../../services/earningsApi";
 
 /**
  * UserDashBoard Component
@@ -33,9 +34,36 @@ import { chatApi } from "../../services/chatApi";
  * @component DashBoard
  * @returns {JSX.Element}
  */
+/**
+ * Edge TTS Neural voice map for supported Indian languages.
+ */
+const LANGUAGE_VOICES = {
+  "English":   "en-IN-NeerjaNeural",
+  "Hindi":     "hi-IN-SwaraNeural",
+  "Kannada":   "kn-IN-SapnaNeural",
+  "Telugu":    "te-IN-ShrutiNeural",
+  "Tamil":     "ta-IN-PallaviNeural",
+  "Marathi":   "mr-IN-AarohiNeural",
+  "Malayalam": "ml-IN-SobhanaNeural",
+  "Bengali":   "bn-IN-TanishaaNeural",
+  "Urdu":      "ur-IN-GulNeural",
+  "Gujarati":  "gu-IN-DhwaniNeural",
+};
+
 export default function DashBoard() {
   const [time, setTime] = useState("");
   const navigate = useNavigate();
+
+  // Language preference — persisted in localStorage
+  const [selectedLanguage, setSelectedLanguage] = useState(
+    () => localStorage.getItem("gigone_language") || "English"
+  );
+
+  const handleLanguageChange = (e) => {
+    const lang = e.target.value;
+    setSelectedLanguage(lang);
+    localStorage.setItem("gigone_language", lang);
+  };
 
   // Conversational State
   const { isRecording, startRecording, stopRecording } = useVoiceRecorder();
@@ -50,6 +78,7 @@ export default function DashBoard() {
   const [location, setLocation] = useState({ lat: null, lon: null });
   const [weatherData, setWeatherData] = useState(null);
   const [burnoutStatus, setBurnoutStatus] = useState(null);
+  const [weeklyData, setWeeklyData] = useState(null);
   const chatEndRef = useRef(null);
   const currentAudioRef = useRef(null);
   const playbackSessionRef = useRef(0);
@@ -58,7 +87,7 @@ export default function DashBoard() {
    * Generates and plays audio for text seamlessly, chunking by sentences to reduce Time-to-First-Audio.
    * @private
    */
-  const playSpeech = (text) => {
+  const playSpeech = (text, voice) => {
     const currentSession = ++playbackSessionRef.current;
 
     if (currentAudioRef.current) {
@@ -138,7 +167,7 @@ export default function DashBoard() {
         return;
       }
 
-      chatApi.synthesizeSpeech(cleanSentence).then(blob => {
+      chatApi.synthesizeSpeech(cleanSentence, voice).then(blob => {
         if (playbackSessionRef.current !== currentSession) return;
         audioQueue[index] = blob ? URL.createObjectURL(blob) : "NATIVE";
         if (index === nextToPlayIndex && !isPlaying) {
@@ -162,10 +191,10 @@ export default function DashBoard() {
   const initChat = async () => {
     try {
       setIsProcessing(true);
-      const data = await chatApi.startSession();
+      const data = await chatApi.startSession(selectedLanguage);
       setConversationId(data.conversationId);
       setMessages([{ role: "assistant", text: data.reply }]);
-      playSpeech(data.reply);
+      playSpeech(data.reply, LANGUAGE_VOICES[selectedLanguage]);
     } catch (err) {
       console.error("Session initialization failure:", err);
     } finally {
@@ -211,6 +240,11 @@ export default function DashBoard() {
       .getBurnoutStatus()
       .then(setBurnoutStatus)
       .catch((err) => console.warn("Failed fetching burnout status:", err));
+
+    earningsApi
+      .getWeeklySummary()
+      .then(setWeeklyData)
+      .catch((err) => console.warn("Failed fetching weekly summary:", err));
 
     // Context Gathering: Location-aware services
     if ("geolocation" in navigator) {
@@ -285,11 +319,17 @@ export default function DashBoard() {
         conversationId,
         location.lat,
         location.lon,
+        selectedLanguage,
       );
 
       if (data.burnoutStatus) {
         setBurnoutStatus(data.burnoutStatus);
       }
+      // Refresh overview panel after check-in completes
+      earningsApi
+        .getWeeklySummary()
+        .then(setWeeklyData)
+        .catch(() => {});
 
       setMessages((prev) => {
         const newMsgs = prev.slice(0, -1);
@@ -299,7 +339,7 @@ export default function DashBoard() {
           { role: "assistant", text: data.reply },
         ];
       });
-      playSpeech(data.reply);
+      playSpeech(data.reply, LANGUAGE_VOICES[selectedLanguage]);
     } catch (err) {
       console.error("Voice interaction error:", err);
     } finally {
@@ -369,6 +409,30 @@ export default function DashBoard() {
         {/* Top Operational Bar */}
         <header className="dashboard-topbar">
           <span className="topbar-badge active">🟢 Chatbot Online</span>
+          {/* Language Selector */}
+          <select
+            value={selectedLanguage}
+            onChange={handleLanguageChange}
+            title="AI Response Language"
+            style={{
+              background: "rgba(255,255,255,0.08)",
+              border: "1px solid rgba(255,255,255,0.18)",
+              borderRadius: "20px",
+              color: "var(--color-accent)",
+              fontSize: "0.78rem",
+              fontWeight: 600,
+              padding: "0.25rem 0.75rem",
+              cursor: "pointer",
+              outline: "none",
+              fontFamily: "inherit",
+            }}
+          >
+            {Object.keys(LANGUAGE_VOICES).map((lang) => (
+              <option key={lang} value={lang} style={{ background: "#0d0e1a", color: "#fff" }}>
+                🌐 {lang}
+              </option>
+            ))}
+          </select>
           {weatherData ? (
             <>
               <span className="topbar-badge">
@@ -504,30 +568,55 @@ export default function DashBoard() {
             <div className="earnings-card">
               <p className="earnings-card-label">Current Progress</p>
               <p>
-                <span className="earnings-amount">₹5,800 this week</span>
+                <span className="earnings-amount">
+                  {weeklyData
+                    ? `₹${weeklyData.totalEarned.toLocaleString("en-IN")} this week`
+                    : "Loading..."}
+                </span>
               </p>
+              {weeklyData && (
+                <p style={{ fontSize: "0.8rem", color: "rgba(255,255,255,0.5)", margin: "0.25rem 0 0.5rem" }}>
+                  {weeklyData.totalHours.toFixed(1)} hrs · ₹{weeklyData.avgPerHour}/hr avg
+                </p>
+              )}
               <div className="bar-chart">
-                {[40, 60, 80, 50, 90, 70, 55].map((h, i) => (
-                  <div
-                    key={i}
-                    className={`bar ${h > 75 ? "active" : ""}`}
-                    style={{ height: `${h}%` }}
-                  ></div>
-                ))}
+                {(weeklyData?.dailyEarnings ?? [0,0,0,0,0,0,0]).map((val, i) => {
+                  const max = Math.max(...(weeklyData?.dailyEarnings ?? [1]));
+                  const pct = max > 0 ? Math.round((val / max) * 90) + 10 : 10;
+                  return (
+                    <div
+                      key={i}
+                      className={`bar ${val > 0 && pct > 70 ? "active" : ""}`}
+                      style={{ height: `${pct}%`, opacity: val === 0 ? 0.25 : 1 }}
+                      title={["Mon","Tue","Wed","Thu","Fri","Sat","Sun"][i] + `: ₹${val}`}
+                    ></div>
+                  );
+                })}
               </div>
             </div>
             <div className="work-logs-summary">
               <div className="work-logs-header">
                 <span>Recent Shifts</span>
               </div>
-              {["Uber", "Swiggy", "Rapido"].map((p, i) => (
-                <div key={i} className="work-log-item">
-                  <span className="work-log-platform">{p}</span>
-                  <span className="work-log-meta">
-                    Recent · {5 - i} hrs · ₹{1200 - i * 200}
-                  </span>
+              {weeklyData?.recentShifts?.length > 0 ? (
+                weeklyData.recentShifts.map((shift) => (
+                  <div key={shift._id} className="work-log-item">
+                    <span className="work-log-platform">{shift.platform}</span>
+                    <span className="work-log-meta">
+                      {new Date(shift.date).toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short" })} · {shift.hours} hrs · ₹{shift.amount.toLocaleString("en-IN")}
+                    </span>
+                  </div>
+                ))
+              ) : weeklyData ? (
+                <div className="work-log-item" style={{ opacity: 0.5 }}>
+                  <span className="work-log-platform">No shifts this week</span>
+                  <span className="work-log-meta">Complete a check-in to track earnings</span>
                 </div>
-              ))}
+              ) : (
+                <div className="work-log-item" style={{ opacity: 0.5 }}>
+                  <span className="work-log-platform">Loading shifts...</span>
+                </div>
+              )}
             </div>
           </section>
         </div>

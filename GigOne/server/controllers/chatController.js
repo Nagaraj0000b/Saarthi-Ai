@@ -1,296 +1,379 @@
 /**
- * @fileoverview Chat Controller orchestrating the AI-driven check-in experience.
- * Manages voice-to-text transcription, context gathering (weather/traffic), 
- * sentiment analysis, and structured data extraction through a unified AI turn.
- * 
- * @module server/controllers/chatController
- * @requires ../services/groqService
- * @requires ../services/geminiService
- * @requires ../services/weatherService
- * @requires ../services/trafficService
- * @requires ../services/conversationService
- * @requires ../models/Conversation
+ * @fileoverview Chat controller coordinates the AI-driven check-in experience.
  */
 
-const { transcribeAudio } = require("../services/groqService");
-const { analyzeSentiment } = require("../services/geminiService");
+const fs = require("fs/promises");
+const { transcribeAudio } = require("../services/speechService");
 const { getWeatherContext } = require("../services/weatherService");
 const { getTraffic } = require("../services/trafficService");
-const { generateGreeting, processChatTurn, getNextStep } = require("../services/conversationService");
-const { checkBurnout } = require("../services/burnoutService");
+const {
+  generateGreeting,
+  processChatTurn,
+  getNextStep,
+  STEP_CONFIG,
+} = require("../services/conversationService");
+const { analyzeMoodText } = require("../services/sentimentService");
+const { evaluateWellbeingRisk } = require("../services/wellbeingRiskService");
 const Conversation = require("../models/Conversation");
+const EarningsEntry = require("../models/EarningsEntry");
 const User = require("../models/User");
-const fs = require("fs");
+const asyncHandler = require("../utils/asyncHandler");
+const AppError = require("../utils/appError");
+const {
+  ensureNonEmptyString,
+  normalizePlatform,
+  parseCoordinates,
+} = require("../utils/validation");
 
-/**
- * Helper to calculate burnout metrics at the end of a check-in.
- */
+const TEXT_TO_NUM = {
+  half: 0.5,
+  one: 1,
+  two: 2,
+  three: 3,
+  four: 4,
+  five: 5,
+  six: 6,
+  seven: 7,
+  eight: 8,
+  nine: 9,
+  ten: 10,
+  eleven: 11,
+  twelve: 12,
+};
+
+const STEP_FIELD_MAPPING = {
+  platform: "platform",
+  earnings: "earnings",
+  hours: "hours",
+};
+
+const MISSING_VALUE_REPLIES = {
+  platform:
+    "Main theek se samajh nahi paaya ki aapne aaj kis platform par kaam kiya. Kya aap dobara bata sakte hain? (Uber, Swiggy, Rapido ya Other?)",
+  earnings: "Sorry, aapki aaj ki total earnings miss ho gayi. Kya aap amount dobara bata sakte ho?",
+  hours: "Sorry, total working hours miss ho gaye. Kya aap hours dobara bata sakte ho?",
+};
+
+const cleanupUploadedFile = async (filePath) => {
+  if (!filePath) {
+    return;
+  }
+
+  try {
+    await fs.unlink(filePath);
+  } catch (error) {
+    if (error.code !== "ENOENT") {
+      console.warn("Temporary audio cleanup failed:", error.message);
+    }
+  }
+};
+
+const parseExtractedNumber = (value) => {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value !== "string") {
+    return null;
+  }
+
+  const normalized = value.toLowerCase();
+  const digitMatch = normalized.match(/[\d.]+/);
+  if (digitMatch) {
+    const parsed = Number(digitMatch[0]);
+    return Number.isFinite(parsed) ? parsed : null;
+  }
+
+  for (const [word, numericValue] of Object.entries(TEXT_TO_NUM)) {
+    if (normalized.includes(word)) {
+      return numericValue;
+    }
+  }
+
+  return null;
+};
+
+const normalizeExtractedValue = (currentStep, extractedValue) => {
+  if (extractedValue === null || extractedValue === undefined || extractedValue === "") {
+    return null;
+  }
+
+  if (currentStep === "platform") {
+    try {
+      return normalizePlatform(String(extractedValue));
+    } catch (error) {
+      return null;
+    }
+  }
+
+  if (currentStep === "earnings" || currentStep === "hours") {
+    return parseExtractedNumber(extractedValue);
+  }
+
+  return extractedValue;
+};
+
+const applyExtractedValue = (conversation, currentStep, extractedValue) => {
+  const field = STEP_FIELD_MAPPING[currentStep];
+  if (!field || extractedValue === null) {
+    return;
+  }
+
+  conversation.extractedData = conversation.extractedData || {};
+  conversation.extractedData[field] = extractedValue;
+};
+
 const calculateAndSaveBurnout = async (conversation) => {
-  const todaySentiments = conversation.messages
-    .filter(m => m.sentiment && m.sentiment.score !== undefined)
-    .map(m => m.sentiment.score);
-  const todayScore = todaySentiments.length > 0 
-    ? Number((todaySentiments.reduce((a,b)=>a+b, 0) / todaySentiments.length).toFixed(2))
-    : 0;
+  try {
+    const riskData = await evaluateWellbeingRisk(conversation.userId, conversation.dailyMood);
+    
+    // Save to the new Schema Block
+    conversation.wellbeingRisk = riskData;
 
-  // Fetch last 4 'done' conversations chronologically backward
-  const pastConvos = await Conversation.find({
-    userId: conversation.userId,
-    step: "done",
-    _id: { $ne: conversation._id }
-  }).sort({ createdAt: -1 }).limit(4);
+    // Optional: Backwards compatibility bridging for older UI clients
+    conversation.burnoutStatus = {
+        isBurnoutAlert: riskData.riskLevel === "high",
+        isStressWarning: riskData.riskLevel === "moderate",
+        averageScore: riskData.riskScore,
+        action: riskData.recommendedAction
+    };
+  } catch (error) {
+    console.warn("Wellbeing risk evaluation failed:", error.message);
+  }
+};
 
-  // Reverse them so they are in [Oldest -> Newest (yesterday)] order
-  const pastScores = pastConvos.reverse().map(c => {
-    const scores = c.messages.filter(m => m.sentiment && m.sentiment.score !== undefined).map(m => m.sentiment.score);
-    return scores.length > 0 ? Number((scores.reduce((a,b)=>a+b, 0)/scores.length).toFixed(2)) : 0;
+const persistAutoSavedEarnings = async (userId, extractedData) => {
+  if (!extractedData?.platform || extractedData.earnings === undefined || extractedData.earnings === null) {
+    return;
+  }
+
+  try {
+    await EarningsEntry.create({
+      userId,
+      platform: normalizePlatform(extractedData.platform),
+      amount: Number(extractedData.earnings) || 0,
+      hours: Number(extractedData.hours) || 0,
+    });
+  } catch (error) {
+    console.warn("Auto-save earning failed:", error.message);
+  }
+};
+
+const findConversationForUser = async (conversationId, userId) => {
+  const conversation = await Conversation.findOne({ _id: conversationId, userId });
+
+  if (!conversation) {
+    throw new AppError("Conversation not found", 404, {
+      code: "CONVERSATION_NOT_FOUND",
+    });
+  }
+
+  return conversation;
+};
+
+const runChatTurn = async ({ conversation, userText, language, context, userId }) => {
+  const currentStep = conversation.step;
+  const turnResult = await processChatTurn(
+    currentStep,
+    userText,
+    conversation.messages,
+    context,
+    language || null
+  );
+
+  let aiReply = turnResult.reply;
+  const normalizedValue = normalizeExtractedValue(currentStep, turnResult.extractedValue);
+
+  if (currentStep === "mood") {
+    conversation.dailyMood = await analyzeMoodText(userText, {
+      language,
+      sourceStep: "mood",
+    });
+  }
+
+  conversation.messages.push({ role: "user", text: userText });
+
+  if (normalizedValue === null && STEP_CONFIG[currentStep]?.extract) {
+    aiReply = MISSING_VALUE_REPLIES[currentStep] || aiReply;
+  }
+
+  applyExtractedValue(conversation, currentStep, normalizedValue);
+  conversation.messages.push({ role: "assistant", text: aiReply });
+
+  const nextStep = getNextStep(currentStep, normalizedValue);
+  conversation.step = nextStep;
+
+  if (currentStep !== "done" && nextStep === "done") {
+    await calculateAndSaveBurnout(conversation);
+    await persistAutoSavedEarnings(userId, conversation.extractedData);
+  }
+
+  await conversation.save();
+
+  return { aiReply, nextStep };
+};
+
+const getContext = asyncHandler(async (req, res) => {
+  const coordinates = parseCoordinates(req.query.lat, req.query.lon, { required: true });
+  const [weather, traffic] = await Promise.all([
+    getWeatherContext(coordinates.lat, coordinates.lon),
+    getTraffic(coordinates.lat, coordinates.lon),
+  ]);
+
+  res.json({ weather, traffic });
+});
+
+const startChat = asyncHandler(async (req, res) => {
+  const userId = req.user.userId;
+  const user = await User.findById(userId).select("name");
+  const lastDone = await Conversation.findOne({ userId, step: "done" }).sort({ createdAt: -1 });
+  const context = lastDone?.burnoutStatus ? { burnoutStatus: lastDone.burnoutStatus } : null;
+  const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+  const greeting = await generateGreeting(user?.name || "buddy", context, language || null);
+
+  const conversation = await Conversation.create({
+    userId,
+    step: "mood",
+    messages: [{ role: "assistant", text: greeting }],
   });
 
-  // History array is [Day-4, Day-3, Day-2, Day-1, Today]
-  const historyArray = [...pastScores, todayScore];
-  conversation.burnoutStatus = checkBurnout(historyArray);
-};
+  res.json({
+    conversationId: conversation._id,
+    step: "mood",
+    reply: greeting,
+  });
+});
 
-/**
- * Aggregates real-time external context (weather & traffic) for a given location.
- * 
- * @async
- * @function getContext
- * @param {Object} req - Express request object.
- * @param {string} req.query.lat - Latitude.
- * @param {string} req.query.lon - Longitude.
- * @param {Object} res - Express response object.
- * @returns {Promise<void>}
- */
-const getContext = async (req, res) => {
-  const { lat, lon } = req.query;
-  if (!lat || !lon) {
-    return res.status(400).json({ message: "lat and lon are required" });
-  }
-  try {
-    const [weather, traffic] = await Promise.all([
-      getWeatherContext(lat, lon),
-      getTraffic(lat, lon),
-    ]);
-    res.json({ weather, traffic });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-/**
- * Initializes a new conversation check-in session.
- * Provision a Conversation document and generates a personalized greeting.
- * 
- * @async
- * @function startChat
- * @param {Object} req - Express request object (authenticated).
- * @param {Object} res - Express response object.
- * @returns {Promise<void>}
- */
-const startChat = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const user = await User.findById(userId);
-    const userName = user?.name || "buddy";
-
-    // Inject last known burnout status to enable protective JITAI greetings
-    const lastDone = await Conversation.findOne({ userId, step: "done" }).sort({ createdAt: -1 });
-    const context = lastDone && lastDone.burnoutStatus ? { burnoutStatus: lastDone.burnoutStatus } : null;
-
-    const greeting = await generateGreeting(userName, context);
-
-    const conversation = await Conversation.create({
-      userId,
-      step: "mood", 
-      messages: [{ role: "assistant", text: greeting }],
-    });
-
-    res.json({
-      conversationId: conversation._id,
-      step: "mood",
-      reply: greeting,
-    });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
-
-/**
- * Handles a multimodal (voice) turn in the conversation.
- * Transcribes audio, fetches context, and executes a unified AI processing step
- * to determine the next conversational turn and extract domain data.
- * 
- * @async
- * @function reply
- * @param {Object} req - Express request object with Multer file attachment.
- * @param {string} req.body.conversationId - Active conversation ID.
- * @param {number} [req.body.lat] - User's current latitude.
- * @param {number} [req.body.lon] - User's current longitude.
- * @param {Object} res - Express response object.
- * @returns {Promise<void>}
- */
-const reply = async (req, res) => {
-  if (!req.file) {
-    return res.status(400).json({ message: "No audio file received" });
+const reply = asyncHandler(async (req, res) => {
+  if (!req.file?.path) {
+    throw new AppError("Audio file is required", 400, { code: "AUDIO_REQUIRED" });
   }
 
   const filePath = req.file.path;
-  const { conversationId, lat, lon } = req.body;
-
-  if (!conversationId) {
-    return res.status(400).json({ message: "conversationId is required" });
-  }
 
   try {
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) {
-      return res.status(404).json({ message: "Conversation not found" });
-    }
+    const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
+    const coordinates = parseCoordinates(req.body.lat, req.body.lon);
+    const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+    const conversation = await findConversationForUser(conversationId, req.user.userId);
 
-    // Parallelize compute-intensive transcription and external API calls
+    const weatherPromise = coordinates
+      ? getWeatherContext(coordinates.lat, coordinates.lon).catch((error) => {
+          console.warn("Weather context fetch failed during chat:", error.message);
+          return null;
+        })
+      : Promise.resolve(null);
+
     const [transcription, weather] = await Promise.all([
       transcribeAudio(filePath),
-      (lat && lon) ? getWeatherContext(lat, lon).catch(err => {
-        console.warn("Weather context fetch failed during chat:", err.message);
-        return null;
-      }) : Promise.resolve(null)
+      weatherPromise,
     ]);
 
-    const context = weather ? { weather } : null;
-    const currentStep = conversation.step;
+    if (typeof transcription !== "string" || transcription.trim().length === 0) {
+      throw new AppError("Audio transcription was empty", 502, {
+        code: "TRANSCRIPTION_EMPTY",
+      });
+    }
 
-    // Unified AI Turn: Combines Sentiment, Response Generation, and Data Extraction
-    const { sentiment, reply: aiReply, extractedValue } = await processChatTurn(
-      currentStep,
-      transcription,
-      conversation.messages,
-      context
-    );
-
-    // Persist user interaction
-    conversation.messages.push({
-      role: "user",
-      text: transcription,
-      sentiment,
+    const { aiReply, nextStep } = await runChatTurn({
+      conversation,
+      userText: transcription.trim(),
+      language,
+      context: weather ? { weather } : null,
+      userId: req.user.userId,
     });
-
-    // Update structured data based on current step requirements
-    if (extractedValue !== null) {
-      const fieldMapping = { platform: "platform", earnings: "earnings", hours: "hours" };
-      const field = fieldMapping[currentStep];
-      if (field) {
-        conversation.extractedData = conversation.extractedData || {};
-        conversation.extractedData[field] = extractedValue;
-      }
-    }
-
-    // Persist assistant response
-    conversation.messages.push({ role: "assistant", text: aiReply });
-
-    // Transition State
-    const nextStep = getNextStep(currentStep, extractedValue);
-    conversation.step = nextStep;
-
-    if (nextStep === "done") {
-      await calculateAndSaveBurnout(conversation);
-    }
-    await conversation.save();
 
     res.json({
       conversationId: conversation._id,
-      transcription,
-      sentiment,
+      transcription: transcription.trim(),
       reply: aiReply,
       step: nextStep,
       extractedData: conversation.extractedData,
       burnoutStatus: conversation.burnoutStatus,
+      wellbeingRisk: conversation.wellbeingRisk,
       isComplete: nextStep === "done",
     });
-  } catch (err) {
-    console.error("Critical error in chat reply handler:", err);
-    res.status(500).json({ message: "Internal processing error", error: err.message });
   } finally {
-    // Aggressive cleanup of temporary audio assets
-    fs.unlink(filePath, (err) => { if (err) console.error("Temp file cleanup failed:", err); });
+    await cleanupUploadedFile(filePath);
   }
-};
+});
 
-/**
- * Text-based fallback for the conversational interface.
- * Useful for debugging or low-bandwidth scenarios where audio processing is bypassed.
- * 
- * @async
- * @function replyText
- */
-const replyText = async (req, res) => {
-  const { conversationId, text } = req.body;
-  if (!conversationId || !text) return res.status(400).json({ message: "Missing required fields" });
+const replyText = asyncHandler(async (req, res) => {
+  const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
+  const text = ensureNonEmptyString(req.body.text, "text");
+  const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+  const conversation = await findConversationForUser(conversationId, req.user.userId);
 
-  try {
-    const conversation = await Conversation.findById(conversationId);
-    if (!conversation) return res.status(404).json({ message: "Conversation not found" });
+  const { aiReply, nextStep } = await runChatTurn({
+    conversation,
+    userText: text,
+    language,
+    context: null,
+    userId: req.user.userId,
+  });
 
-    // In text-only mode, we still utilize the unified process turn for consistency
-    const { sentiment, reply: aiReply, extractedValue } = await processChatTurn(
-      conversation.step,
-      text,
-      conversation.messages,
-      null // context injection omitted for basic text replies
-    );
+  res.json({
+    conversationId: conversation._id,
+    transcription: text,
+    reply: aiReply,
+    step: nextStep,
+    extractedData: conversation.extractedData,
+    burnoutStatus: conversation.burnoutStatus,
+    wellbeingRisk: conversation.wellbeingRisk,
+    isComplete: nextStep === "done",
+  });
+});
 
-    conversation.messages.push({ role: "user", text, sentiment });
-    
-    if (extractedValue !== null) {
-      const fieldMapping = { platform: "platform", earnings: "earnings", hours: "hours" };
-      const field = fieldMapping[conversation.step];
-      if (field) {
-        conversation.extractedData = conversation.extractedData || {};
-        conversation.extractedData[field] = extractedValue;
-      }
-    }
+const getBurnoutStatus = asyncHandler(async (req, res) => {
+  const lastDone = await Conversation.findOne({
+    userId: req.user.userId,
+    step: "done",
+  }).sort({ createdAt: -1 });
 
-    conversation.messages.push({ role: "assistant", text: aiReply });
-    const nextStep = getNextStep(conversation.step, extractedValue);
-    conversation.step = nextStep;
+  const status = lastDone?.burnoutStatus || {
+    isBurnoutAlert: false,
+    isStressWarning: false,
+    averageScore: 0,
+    action: "Normal - Ready",
+  };
 
-    if (nextStep === "done") {
-      await calculateAndSaveBurnout(conversation);
-    }
-    await conversation.save();
+  if (lastDone && lastDone.wellbeingRisk) {
+    status.wellbeingRisk = lastDone.wellbeingRisk;
+  }
 
-    res.json({
-      conversationId: conversation._id,
-      transcription: text,
-      sentiment,
-      reply: aiReply,
-      step: nextStep,
-      extractedData: conversation.extractedData,
-      burnoutStatus: conversation.burnoutStatus,
-      isComplete: nextStep === "done",
+  res.json(status);
+});
+
+const getChatHistory = asyncHandler(async (req, res) => {
+  const history = await Conversation.find({
+    userId: req.user.userId,
+    step: "done",
+  }).sort({ createdAt: -1 });
+
+  res.json(history);
+});
+
+const deleteConversation = asyncHandler(async (req, res) => {
+  const deleted = await Conversation.findOneAndDelete({
+    _id: req.params.id,
+    userId: req.user.userId,
+  });
+
+  if (!deleted) {
+    throw new AppError("Conversation not found", 404, {
+      code: "CONVERSATION_NOT_FOUND",
     });
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
-};
 
-/**
- * Quick fetch for the dashboard burnout widget on load.
- */
-const getBurnoutStatus = async (req, res) => {
-  try {
-    const userId = req.user.userId;
-    const lastDone = await Conversation.findOne({ userId, step: "done" }).sort({ createdAt: -1 });
-    const status = lastDone?.burnoutStatus || {
-      isBurnoutAlert: false,
-      isStressWarning: false,
-      averageScore: 0.0,
-      action: "Normal - Ready"
-    };
-    res.json(status);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
-  }
-};
+  res.json({ message: "Conversation deleted successfully" });
+});
 
-module.exports = { getContext, startChat, reply, replyText, getBurnoutStatus };
+module.exports = {
+  getContext,
+  startChat,
+  reply,
+  replyText,
+  getBurnoutStatus,
+  getChatHistory,
+  deleteConversation,
+};

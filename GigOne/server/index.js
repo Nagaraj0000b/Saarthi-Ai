@@ -1,67 +1,81 @@
 /**
  * @fileoverview Main entry point for the GigOne Express server.
- * Orchestrates the bootstrapping process including environment configuration,
- * database connectivity, authentication middleware initialization, and API route mapping.
- * 
- * @module server/index
- * @requires express
- * @requires cors
- * @requires dotenv
- * @requires ./config/db
- * @requires passport
+ * Orchestrates environment configuration, database connectivity,
+ * authentication initialization, and API route mapping.
  */
 
-const express   = require("express");
-const cors      = require("cors");
-const dotenv    = require("dotenv");
+const express = require("express");
+const path = require("path");
+const cors = require("cors");
+const dotenv = require("dotenv");
+const passport = require("passport");
 const connectDB = require("./config/db");
+const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 
-// Load environment variables from .env file to process.env
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, ".env") });
 
-// Establish connection to MongoDB via Mongoose
-connectDB();
+require("./config/passport");
 
 const app = express();
 
-/**
- * Middleware Configuration
- */
-app.use(cors());           // Enables Cross-Origin Resource Sharing for frontend integration
-app.use(express.json());   // Body-parser middleware for JSON payloads
-
-/**
- * Passport Authentication Strategy Initialization
- * Configures the application to support Google OAuth 2.0.
- */
-const passport = require("passport");
-require("./config/passport");
+app.use(cors());
+app.use(express.json({ limit: "1mb" }));
 app.use(passport.initialize());
 
-/**
- * API Route Mounting
- * All domain-specific logic is encapsulated within its respective route module.
- */
-app.use("/api/auth",     require("./routes/auth"));      // Authentication & Authorization (Local + OAuth)
-app.use("/api/earnings", require("./routes/earnings"));  // Earnings tracking and management
-app.use("/api/worklogs", require("./routes/worklogs"));  // Historical work session logs
-app.use("/api/chat",     require("./routes/chat"));      // Gigi AI Voice/Text conversational interface
+app.use("/api/auth", require("./routes/auth"));
+app.use("/api/earnings", require("./routes/earnings"));
+app.use("/api/worklogs", require("./routes/worklogs"));
+app.use("/api/chat", require("./routes/chat"));
 
-
-/**
- * Server Health Check
- * Standard endpoint to verify API availability.
- * @route GET /
- */
 app.get("/", (req, res) => {
-  res.json({ message: "GigOne API is running 🚀" });
+  res.json({ message: "GigOne API is running" });
 });
+
+app.use(notFoundHandler);
+app.use(errorHandler);
 
 const PORT = process.env.PORT || 5000;
 
-/**
- * Start the Express listener
- */
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on port ${PORT}`);
-});
+const bootstrap = async () => {
+  let server;
+
+  const shutdown = (label, error) => {
+    if (error) {
+      console.error(`${label}:`, error);
+    }
+
+    if (!server) {
+      process.exit(error ? 1 : 0);
+      return;
+    }
+
+    server.close(() => {
+      process.exit(error ? 1 : 0);
+    });
+  };
+
+  process.once("unhandledRejection", (reason) => {
+    shutdown("Unhandled promise rejection", reason);
+  });
+
+  process.once("uncaughtException", (error) => {
+    shutdown("Uncaught exception", error);
+  });
+
+  await connectDB();
+
+  server = app.listen(PORT, "0.0.0.0", () => {
+    console.log(`Server running on port ${PORT} (bound to 0.0.0.0)`);
+  });
+
+  return server;
+};
+
+if (require.main === module) {
+  bootstrap().catch((error) => {
+    console.error("Server failed to start:", error);
+    process.exit(1);
+  });
+}
+
+module.exports = { app, bootstrap };

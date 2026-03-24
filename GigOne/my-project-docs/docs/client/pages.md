@@ -22,8 +22,10 @@
     -   **AI Companion:** Central avatar, chat bubble history, "Hold to Speak" mic button.
     -   **Overview Panel:** Mental Fatigue Risk meter, Weekly earnings bar chart (CSS-only), recent work logs list.
 
-### Feature Pages (Skeleton)
--   **Earnings:** `/user/earnings` - Detailed financial reports.
--   **Work Logs:** `/user/work-logs` - Shift history.
+### Feature Pages
+-   **Earnings (`pages/user/Earnings.jsx`):** `/user/earnings` - Detailed financial reports connected to backend API.
+-   **Work Logs (`pages/user/WorkLogs.jsx`):** `/user/worklogs` - Shift history connected to backend API.
+
+### Skeleton Pages
 -   **Weekly Report:** `/user/weekly-report` - Aggregated insights.
 -   **Shift Planner:** `/user/shift-planner` - Schedule optimization.

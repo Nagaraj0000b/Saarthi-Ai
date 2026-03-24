@@ -1,65 +1,63 @@
 /**
- * @fileoverview Authentication Routes for local and Google OAuth 2.0.
- * Defines endpoints for user registration, login, and social authentication callbacks.
- * 
- * @module server/routes/auth
- * @requires express
- * @requires passport
- * @requires jsonwebtoken
- * @requires ../controllers/authController
+ * @fileoverview Authentication routes for local and Google OAuth 2.0.
  */
 
 const router = require("express").Router();
-const { register, login } = require("../controllers/authController");
 const passport = require("passport");
 const jwt = require("jsonwebtoken");
+const { register, login } = require("../controllers/authController");
+const AppError = require("../utils/appError");
+const { requireEnv } = require("../utils/env");
+const { googleOAuthEnabled } = require("../config/passport");
 
-/**
- * @route POST /api/auth/register
- * @desc Register a new user
- * @access Public
- */
+const ensureGoogleOAuthEnabled = (req, res, next) => {
+  if (!googleOAuthEnabled) {
+    next(new AppError("Google login is not configured", 503, { code: "OAUTH_UNAVAILABLE" }));
+    return;
+  }
+
+  next();
+};
+
 router.post("/register", register);
-
-/**
- * @route POST /api/auth/login
- * @desc Authenticate user and return JWT
- * @access Public
- */
 router.post("/login", login);
 
-// ==========================================
-// GOOGLE OAUTH ROUTES
-// ==========================================
+router.get(
+  "/google",
+  ensureGoogleOAuthEnabled,
+  passport.authenticate("google", { scope: ["profile", "email"] })
+);
 
-/**
- * @route GET /api/auth/google
- * @desc Initiate Google OAuth 2.0 authentication flow
- * @access Public
- */
-router.get("/google", passport.authenticate("google", { scope: ["profile", "email"] }));
-
-/**
- * @route GET /api/auth/google/callback
- * @desc Google OAuth 2.0 callback endpoint
- * @access Private (via Passport)
- */
 router.get(
   "/google/callback",
-  passport.authenticate("google", { session: false, failureRedirect: "/login" }),
-  (req, res) => {
-    const user = req.user;
+  ensureGoogleOAuthEnabled,
+  passport.authenticate("google", {
+    session: false,
+    failureRedirect: `${process.env.CLIENT_URL || "http://localhost:5173"}/login?error=oauth_failed`,
+  }),
+  (req, res, next) => {
+    try {
+      const user = req.user;
 
-    // Generate internal JWT for the Google-authenticated user
-    const token = jwt.sign(
-      { userId: user._id, role: user.role },
-      process.env.JWT_SECRET,
-      { expiresIn: "7d" }
-    );
+      if (!user?._id) {
+        throw new AppError("Google authentication failed", 401, { code: "AUTH_INVALID" });
+      }
 
-    // Deep link redirect back to the frontend with auth credentials in query params
-    const redirectUrl = process.env.CLIENT_URL || "http://localhost:5173";
-    res.redirect(`${redirectUrl}/user/dashboard?token=${token}&user=${encodeURIComponent(JSON.stringify({ id: user._id, name: user.name, role: user.role }))}`);
+      const token = jwt.sign(
+        { userId: user._id, role: user.role },
+        requireEnv("JWT_SECRET"),
+        { expiresIn: "7d" }
+      );
+
+      const redirectUrl = process.env.CLIENT_URL || "http://localhost:5173";
+      res.redirect(
+        `${redirectUrl}/user/dashboard?token=${token}&user=${encodeURIComponent(
+          JSON.stringify({ id: user._id, name: user.name, role: user.role })
+        )}`
+      );
+    } catch (error) {
+      next(error);
+    }
   }
 );
 

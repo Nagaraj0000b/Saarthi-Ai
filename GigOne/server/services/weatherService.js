@@ -1,34 +1,41 @@
 /**
- * @fileoverview Weather Intelligence Service using OpenWeather API.
- * Fetches current conditions and next-day forecasts to provide contextual AI suggestions.
- * 
- * @module server/services/weatherService
- * @requires axios
+ * @fileoverview Weather intelligence service using the OpenWeather API.
  */
 
 const axios = require("axios");
+const AppError = require("../utils/appError");
+const { requireEnv } = require("../utils/env");
 
-/**
- * Aggregates current and future weather state for a given location.
- * 
- * @async
- * @function getWeatherContext
- * @param {number} lat - Latitude.
- * @param {number} lon - Longitude.
- * @returns {Promise<Object>} Composite weather object containing current and tomorrow's data.
- */
 const getWeatherContext = async (lat, lon) => {
-  const API_KEY = process.env.OPENWEATHER_API_KEY;
-  const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
-  const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${lat}&lon=${lon}&appid=${API_KEY}&units=metric`;
+  const latitude = Number(lat);
+  const longitude = Number(lon);
+
+  if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+    throw new AppError("Valid coordinates are required for weather lookup", 400, {
+      code: "VALIDATION_ERROR",
+    });
+  }
+
+  const apiKey = requireEnv("OPENWEATHER_API_KEY");
+  const currentUrl = `https://api.openweathermap.org/data/2.5/weather?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=metric`;
+  const forecastUrl = `https://api.openweathermap.org/data/2.5/forecast?lat=${latitude}&lon=${longitude}&appid=${apiKey}&units=metric`;
 
   try {
-    const [currentRes, forecastRes] = await Promise.all([
-      axios.get(currentUrl),
-      axios.get(forecastUrl)
+    const [currentResponse, forecastResponse] = await Promise.all([
+      axios.get(currentUrl, { timeout: 8000 }),
+      axios.get(forecastUrl, { timeout: 8000 }),
     ]);
 
-    const currentData = currentRes.data;
+    const currentData = currentResponse.data;
+    const forecastList = forecastResponse.data?.list;
+
+    if (!currentData?.main || !currentData?.weather?.[0] || !Array.isArray(forecastList)) {
+      throw new AppError("Weather data is unavailable for this location", 502, {
+        code: "WEATHER_UNAVAILABLE",
+        expose: false,
+      });
+    }
+
     const current = {
       city: currentData.name,
       temp: currentData.main.temp,
@@ -37,24 +44,32 @@ const getWeatherContext = async (lat, lon) => {
       description: currentData.weather[0].description,
     };
 
-    const list = forecastRes.data.list;
-    const tomorrowDateString = new Date(Date.now() + 86400000).toISOString().split("T")[0]; 
+    const tomorrowDate = new Date(Date.now() + 86400000).toISOString().split("T")[0];
+    const tomorrowForecast =
+      forecastList.find(
+        (item) =>
+          item.dt_txt?.startsWith(tomorrowDate) && item.dt_txt.includes("09:00:00")
+      ) || forecastList.find((item) => item.dt_txt?.startsWith(tomorrowDate));
 
-    // Target morning hours for the next-day forecast (9 AM)
-    let tomorrowForecast = list.find((item) => 
-      item.dt_txt.startsWith(tomorrowDateString) && item.dt_txt.includes("09:00:00")
-    ) || list.find((item) => item.dt_txt.startsWith(tomorrowDateString));
-
-    const tomorrow = tomorrowForecast ? {
-      temp: tomorrowForecast.main.temp,           
-      condition: tomorrowForecast.weather[0].main,
-      description: tomorrowForecast.weather[0].description,
-    } : { condition: "Unknown" };
+    const tomorrow = tomorrowForecast
+      ? {
+          temp: tomorrowForecast.main?.temp,
+          condition: tomorrowForecast.weather?.[0]?.main,
+          description: tomorrowForecast.weather?.[0]?.description,
+        }
+      : { condition: "Unknown" };
 
     return { current, tomorrow };
   } catch (error) {
-    console.error("OpenWeather API Error:", error.message);
-    return { current: { condition: "Unknown" }, tomorrow: { condition: "Unknown" } };
+    if (error instanceof AppError) {
+      throw error;
+    }
+
+    throw new AppError("Weather service is temporarily unavailable", 502, {
+      code: "WEATHER_ERROR",
+      expose: false,
+      cause: error,
+    });
   }
 };
 

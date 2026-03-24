@@ -1,60 +1,133 @@
 /**
- * @fileoverview Earnings Controller managing the retrieval and persistence of income data.
- * Facilitates financial tracking for workers across multiple gig platforms.
- * 
- * @module server/controllers/earningsController
- * @requires ../models/EarningsEntry
+ * @fileoverview Earnings controller managing the retrieval and persistence of income data.
  */
 
 const EarningsEntry = require("../models/EarningsEntry");
+const asyncHandler = require("../utils/asyncHandler");
+const AppError = require("../utils/appError");
+const {
+  ensureNumber,
+  normalizePlatform,
+  parseOptionalDate,
+  parseOptionalNumber,
+} = require("../utils/validation");
 
-/**
- * Retrieves the historical earnings entries for the authenticated user.
- * Results are sorted in reverse chronological order.
- * 
- * @async
- * @function getEarnings
- * @param {Object} req - Express request object (authenticated).
- * @param {Object} res - Express response object.
- * @returns {Promise<void>}
- */
-const getEarnings = async (req, res) => {
-  try {
-    const entries = await EarningsEntry.find({ userId: req.user.userId }).sort({ date: -1 });
-    res.json(entries);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
+const buildEarningPayload = (body, options = {}) => {
+  const { partial = false } = options;
+  const payload = {};
+
+  if (!partial || body.platform !== undefined) {
+    payload.platform = normalizePlatform(body.platform, { required: !partial });
   }
-};
 
-/**
- * Records a new earnings entry for the worker.
- * Implicitly associates the entry with the authenticated user's ID.
- * 
- * @async
- * @function addEarning
- * @param {Object} req - Express request object.
- * @param {string} req.body.platform - The gig platform (e.g., 'Uber', 'Swiggy').
- * @param {number} req.body.amount - Total income earned.
- * @param {number} req.body.hours - Hours worked during this period.
- * @param {Date} [req.body.date] - Transaction date.
- * @param {Object} res - Express response object.
- * @returns {Promise<void>}
- */
-const addEarning = async (req, res) => {
-  const { platform, amount, hours, date } = req.body;
-  try {
-    const entry = await EarningsEntry.create({
-      userId: req.user.userId,
-      platform,
-      amount,
-      hours,
-      date: date || Date.now(),
+  const amount = partial
+    ? parseOptionalNumber(body.amount, "amount", { min: 0 })
+    : ensureNumber(body.amount, "amount", { min: 0 });
+  if (amount !== undefined) {
+    payload.amount = amount;
+  }
+
+  const hours = partial
+    ? parseOptionalNumber(body.hours, "hours", { min: 0 })
+    : ensureNumber(body.hours, "hours", { min: 0 });
+  if (hours !== undefined) {
+    payload.hours = hours;
+  }
+
+  if (!partial || body.date !== undefined) {
+    const parsedDate = parseOptionalDate(body.date);
+    payload.date = parsedDate || new Date();
+  }
+
+  if (partial && Object.keys(payload).length === 0) {
+    throw new AppError("No valid earnings fields were provided", 400, {
+      code: "VALIDATION_ERROR",
     });
-    res.status(201).json(entry);
-  } catch (err) {
-    res.status(500).json({ message: err.message });
   }
+
+  return payload;
 };
 
-module.exports = { getEarnings, addEarning };
+const getEarnings = asyncHandler(async (req, res) => {
+  const entries = await EarningsEntry.find({ userId: req.user.userId }).sort({ date: -1 });
+  res.json(entries);
+});
+
+const addEarning = asyncHandler(async (req, res) => {
+  const payload = buildEarningPayload(req.body);
+  const entry = await EarningsEntry.create({
+    userId: req.user.userId,
+    ...payload,
+  });
+
+  res.status(201).json(entry);
+});
+
+const updateEarning = asyncHandler(async (req, res) => {
+  const payload = buildEarningPayload(req.body, { partial: true });
+  const entry = await EarningsEntry.findOneAndUpdate(
+    { _id: req.params.id, userId: req.user.userId },
+    payload,
+    { new: true, runValidators: true }
+  );
+
+  if (!entry) {
+    throw new AppError("Entry not found", 404, { code: "ENTRY_NOT_FOUND" });
+  }
+
+  res.json(entry);
+});
+
+const deleteEarning = asyncHandler(async (req, res) => {
+  const entry = await EarningsEntry.findOneAndDelete({
+    _id: req.params.id,
+    userId: req.user.userId,
+  });
+
+  if (!entry) {
+    throw new AppError("Entry not found", 404, { code: "ENTRY_NOT_FOUND" });
+  }
+
+  res.json({ message: "Deleted successfully" });
+});
+
+const getWeeklySummary = asyncHandler(async (req, res) => {
+  const now = new Date();
+  const dayOfWeek = now.getUTCDay();
+  const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+  const monday = new Date(now);
+  monday.setUTCDate(now.getUTCDate() + diffToMonday);
+  monday.setUTCHours(0, 0, 0, 0);
+
+  const sunday = new Date(monday);
+  sunday.setUTCDate(monday.getUTCDate() + 6);
+  sunday.setUTCHours(23, 59, 59, 999);
+
+  const entries = await EarningsEntry.find({
+    userId: req.user.userId,
+    date: { $gte: monday, $lte: sunday },
+  }).sort({ date: -1 });
+
+  const totalEarned = entries.reduce((sum, entry) => sum + (Number(entry.amount) || 0), 0);
+  const totalHours = entries.reduce((sum, entry) => sum + (Number(entry.hours) || 0), 0);
+  const avgPerHour = totalHours > 0 ? Math.round(totalEarned / totalHours) : 0;
+
+  const dailyEarnings = [0, 0, 0, 0, 0, 0, 0];
+  entries.forEach((entry) => {
+    const day = new Date(entry.date).getUTCDay();
+    const slot = day === 0 ? 6 : day - 1;
+    dailyEarnings[slot] += Number(entry.amount) || 0;
+  });
+
+  const recentShifts = entries.slice(0, 5).map((entry) => ({
+    _id: entry._id,
+    platform: entry.platform,
+    amount: entry.amount,
+    hours: entry.hours,
+    date: entry.date,
+  }));
+
+  res.json({ totalEarned, totalHours, avgPerHour, dailyEarnings, recentShifts });
+});
+
+module.exports = { getEarnings, addEarning, updateEarning, deleteEarning, getWeeklySummary };
