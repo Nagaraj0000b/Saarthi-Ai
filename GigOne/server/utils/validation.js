@@ -1,6 +1,6 @@
 const AppError = require("./appError");
 
-const VALID_PLATFORMS = ["Uber", "Swiggy", "Rapido", "Other"];
+const VALID_PLATFORMS = ["Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Other"];
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ensureNonEmptyString = (value, fieldName) => {

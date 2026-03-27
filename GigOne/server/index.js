@@ -28,6 +28,7 @@ app.use("/api/auth", require("./routes/auth"));
 app.use("/api/earnings", require("./routes/earnings"));
 app.use("/api/worklogs", require("./routes/worklogs"));
 app.use("/api/chat", require("./routes/chat"));
+app.use("/api/recommendations", require("./routes/recommendations"));
 app.use("/api/tts", ttsRoutes);
 
 app.get("/", (req, res) => {

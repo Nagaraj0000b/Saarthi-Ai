@@ -2,6 +2,7 @@
  * @fileoverview Step-aware conversational AI engine using GCP Vertex AI.
  */
 
+const { GoogleGenerativeAI } = require("@google/generative-ai");
 const { VertexAI } = require("@google-cloud/vertexai");
 const path = require("path");
 const fs = require("fs");
@@ -11,9 +12,21 @@ let model;
 
 const getModel = () => {
   if (!model) {
+    const apiKey = process.env.GEMINI_API_KEY;
+
+    if (apiKey) {
+      try {
+        const genAI = new GoogleGenerativeAI(apiKey);
+        model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+        return model;
+      } catch (error) {
+        console.warn("Failed to initialize Google Generative AI with API Key, falling back to Vertex AI:", error.message);
+      }
+    }
+
     const keyFilename = path.join(__dirname, "..", "credential.json");
     if (!fs.existsSync(keyFilename)) {
-      throw new AppError("Google Cloud credential.json not found in server root.", 500, {
+      throw new AppError("Google Cloud credential.json or GEMINI_API_KEY not found.", 500, {
         code: "CONFIG_ERROR",
       });
     }
@@ -21,7 +34,7 @@ const getModel = () => {
     try {
       const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
       const projectId = credentials.project_id;
-      const location = "us-central1"; // Use your preferred GCP region
+      const location = "us-central1";
 
       const vertexAI = new VertexAI({
         project: projectId,
@@ -33,7 +46,7 @@ const getModel = () => {
         model: "gemini-2.5-flash-lite",
       });
     } catch (error) {
-      throw new AppError("Failed to initialize Vertex AI client", 500, {
+      throw new AppError("Failed to initialize Gemini model (Vertex AI or Gen AI)", 500, {
         code: "AI_INIT_ERROR",
         cause: error,
       });

@@ -37,13 +37,18 @@ const calculateNextShiftTarget = () => {
   const target = new Date(now);
   const hour = now.getHours();
 
-  if (hour >= 16) {
-    target.setDate(now.getDate() + 1);
-    target.setHours(9, 0, 0, 0);
-  } else if (hour <= 12) {
+  // Logic:
+  // 1. Morning check-in (before 10 AM) -> Predict for today's Lunch shift (12:00 PM)
+  // 2. Mid-day check-in (10 AM - 3 PM) -> Predict for today's Evening shift (6:00 PM)
+  // 3. Late check-in (after 3 PM) -> Predict for tomorrow's Morning shift (9:00 AM)
+  
+  if (hour < 10) {
+    target.setHours(12, 0, 0, 0);
+  } else if (hour < 15) {
     target.setHours(18, 0, 0, 0);
   } else {
-    target.setHours(hour + 12);
+    target.setDate(now.getDate() + 1);
+    target.setHours(9, 0, 0, 0);
   }
 
   return Math.floor(target.getTime() / 1000);

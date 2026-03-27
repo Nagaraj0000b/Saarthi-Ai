@@ -6,11 +6,18 @@ const { aggregateWorkload, getRecentValidMoodFeatures } = require("./workloadAgg
 const AppError = require("../utils/appError");
 
 const validateUserId = (userId) => {
-  if (typeof userId !== "string" || userId.trim().length === 0) {
+  if (!userId) {
     throw new AppError("userId is required", 400, { code: "VALIDATION_ERROR" });
   }
 
-  return userId.trim();
+  // Convert to string (handles ObjectIds from Mongoose)
+  const idString = String(userId).trim();
+
+  if (idString.length === 0) {
+    throw new AppError("userId is required", 400, { code: "VALIDATION_ERROR" });
+  }
+
+  return idString;
 };
 
 const computeEmotionScore = (moodFeatures) => {
