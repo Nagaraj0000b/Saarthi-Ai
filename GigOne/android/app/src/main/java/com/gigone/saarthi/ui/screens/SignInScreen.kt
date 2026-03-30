@@ -57,10 +57,9 @@ fun SignInScreen(
                     .verticalScroll(rememberScrollState()),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                // Title
                 Row {
-                    Text("Saar", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.TextPrimary)
-                    Text("thi", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.Primary)
+                    Text("Gig", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.TextPrimary)
+                    Text("One", fontSize = 28.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.Primary)
                 }
                 Text(
                     "Welcome back",

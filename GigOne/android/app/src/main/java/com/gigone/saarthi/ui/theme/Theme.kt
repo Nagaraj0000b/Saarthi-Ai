@@ -4,7 +4,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.graphics.Color
 
-private val DarkColorScheme = darkColorScheme(
+private val LightColorScheme = lightColorScheme(
     primary = AppColors.Primary,
     secondary = AppColors.Accent,
     background = AppColors.BgDeep,
@@ -19,7 +19,7 @@ private val DarkColorScheme = darkColorScheme(
 
 @Composable
 fun SaarthiTheme(content: @Composable () -> Unit) {
-    // Strictly enforce Dark Mode
-    AppColors.instance.updateColorsFrom(darkColors)
-    MaterialTheme(colorScheme = DarkColorScheme, content = content)
+    // Strictly enforce Zomato Theme as requested
+    AppColors.instance.updateColorsFrom(zomatoColors)
+    MaterialTheme(colorScheme = LightColorScheme, content = content)
 }

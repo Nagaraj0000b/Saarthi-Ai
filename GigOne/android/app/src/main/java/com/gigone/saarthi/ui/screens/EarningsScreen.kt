@@ -35,23 +35,21 @@ import java.util.Locale
 // ═══════════════════════ PLATFORM ICON HELPER ═══════════════════════
 internal data class PlatformVisual(val icon: ImageVector, val color: Color)
 
-internal fun getPlatformVisual(platform: String): PlatformVisual = when (platform.lowercase()) {
-    "uber" -> PlatformVisual(Icons.Default.LocalTaxi, Color(0xFF276EF1))
-    "ola" -> PlatformVisual(Icons.Default.LocalTaxi, Color(0xFF1C8D3F))
-    "swiggy" -> PlatformVisual(Icons.Default.Fastfood, Color(0xFFFC8019))
-    "zomato" -> PlatformVisual(Icons.Default.Restaurant, Color(0xFFE23744))
-    "rapido" -> PlatformVisual(Icons.Default.TwoWheeler, Color(0xFFFFC72C))
-    "zepto" -> PlatformVisual(Icons.Default.ShoppingBag, Color(0xFF8B2FDB))
-    "blinkit" -> PlatformVisual(Icons.Default.ShoppingCart, Color(0xFFF5C418))
-    "porter" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFF2B3A4A))
-    "dunzo" -> PlatformVisual(Icons.Default.DeliveryDining, Color(0xFF00D290))
-    "shadowfax" -> PlatformVisual(Icons.Default.DeliveryDining, Color(0xFFFF6B35))
-    "amazon flex" -> PlatformVisual(Icons.Default.Inventory, Color(0xFFFF9900))
-    "flipkart flex" -> PlatformVisual(Icons.Default.Inventory2, Color(0xFF2874F0))
-    "borzo" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFF00B4D8))
-    "delhivery" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFFE41E26))
-    "ecom express" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFF0B3D91))
-    else -> PlatformVisual(Icons.Default.Work, AppColors.TextSecondary)
+internal fun getPlatformVisual(platform: String): PlatformVisual {
+    val icon = when (platform.lowercase()) {
+        "uber", "ola" -> Icons.Default.LocalTaxi
+        "swiggy" -> Icons.Default.Fastfood
+        "zomato" -> Icons.Default.Restaurant
+        "rapido" -> Icons.Default.TwoWheeler
+        "zepto" -> Icons.Default.ShoppingBag
+        "blinkit" -> Icons.Default.ShoppingCart
+        "porter", "borzo", "delhivery", "ecom express" -> Icons.Default.LocalShipping
+        "dunzo", "shadowfax" -> Icons.Default.DeliveryDining
+        "amazon flex", "flipkart flex" -> Icons.Default.Inventory
+        else -> Icons.Default.Work
+    }
+    // Professional Monochromatic style
+    return PlatformVisual(icon, AppColors.TextPrimary)
 }
 
 // ═══════════════════════ MAIN SCREEN ═══════════════════════
@@ -63,8 +61,6 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
 
     var showDialog by remember { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<EarningEntry?>(null) }
-
-    LaunchedEffect(Unit) { vm.loadEarnings() }
 
     val totalEarned by remember(entries) { derivedStateOf { entries.sumOf { it.amount.toDouble() }.toFloat() } }
     val totalHours by remember(entries) { derivedStateOf { entries.sumOf { it.hours.toDouble() }.toFloat() } }
@@ -121,21 +117,21 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
                 icon = Icons.Outlined.AccountBalanceWallet,
                 label = "Earned",
                 value = "₹${totalEarned.toInt()}",
-                color = AppColors.Accent,
+                color = AppColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
             EarningSummaryCard(
                 icon = Icons.Outlined.Schedule,
                 label = "Hours",
                 value = "${totalHours}h",
-                color = AppColors.Primary,
+                color = AppColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
             EarningSummaryCard(
                 icon = Icons.Outlined.TrendingUp,
                 label = "Avg/Hr",
                 value = "₹$avgPerHour",
-                color = Color(0xFFFBBF24),
+                color = AppColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -143,11 +139,11 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
         Spacer(Modifier.height(12.dp))
 
         // ── List ─────────────────────────────────────────────────────────
-        if (isLoading) {
+        if (isLoading && entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.Primary, strokeWidth = 2.5.dp)
             }
-        } else if (error != null) {
+        } else if (error != null && entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = AppColors.Error, modifier = Modifier.size(40.dp))
@@ -156,7 +152,7 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
                     Text(error ?: "", color = AppColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
                 }
             }
-        } else if (entries.isEmpty()) {
+        } else if (entries.isEmpty() && !isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = AppColors.TextMuted, modifier = Modifier.size(48.dp))
@@ -166,18 +162,26 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = isLoading,
+                onRefresh = { vm.loadEarnings() },
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(entries, key = { it._id }) { entry ->
-                    CompactEarningCard(
-                        entry = entry,
-                        onEdit = { editingEntry = entry; showDialog = true },
-                        onDelete = { vm.deleteEarning(entry._id) }
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(entries, key = { it._id }) { entry ->
+                        CompactEarningCard(
+                            entry = entry,
+                            onEdit = { editingEntry = entry; showDialog = true },
+                            onDelete = { vm.deleteEarning(entry._id) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
-                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
@@ -316,7 +320,7 @@ private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete
 // ═══════════════════════ EARNING DIALOG ═══════════════════════
 @Composable
 fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, String, Float, Float) -> Unit) {
-    val platforms = listOf("Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Zepto", "Blinkit", "Porter", "Dunzo", "Other")
+    val platforms = listOf("Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Other")
 
     var platform by remember { mutableStateOf(entry?.platform ?: "Uber") }
     var amount by remember { mutableStateOf(entry?.amount?.toInt()?.toString() ?: "") }

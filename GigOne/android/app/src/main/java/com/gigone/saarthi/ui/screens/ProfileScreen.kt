@@ -59,41 +59,48 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
                 .background(AppColors.BgCard)
                 .padding(top = 16.dp, bottom = 24.dp)
         ) {
-            // Top Right Options (Edit, Settings, Logout)
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)) {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = AppColors.TextPrimary)
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(AppColors.BgCard)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Edit Profile", color = AppColors.TextPrimary) },
-                        onClick = { showMenu = false; navController.navigate("edit_profile") },
-                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = AppColors.TextPrimary) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Settings", color = AppColors.TextPrimary) },
-                        onClick = { showMenu = false; navController.navigate("account_settings") },
-                        leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = AppColors.TextPrimary) }
-                    )
-                    HorizontalDivider(color = AppColors.BorderSubtle)
-                    DropdownMenuItem(
-                        text = { Text("Logout", color = AppColors.Error, fontWeight = FontWeight.Bold) },
-                        onClick = { showMenu = false; onLogout() },
-                        leadingIcon = { Icon(Icons.Outlined.Logout, contentDescription = null, tint = AppColors.Error) }
-                    )
-                }
-            }
-
-            // Back button
-            IconButton(
-                onClick = { navController.popBackStack() },
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp)
+            // --- Top Navigation Row ---
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
+                // Back button
+                IconButton(
+                    onClick = { navController.popBackStack() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
+                }
+
+                // Top Right Options (Edit, Settings, Logout)
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = AppColors.TextPrimary)
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(AppColors.BgCard)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Profile", color = AppColors.TextPrimary) },
+                            onClick = { showMenu = false; navController.navigate("edit_profile") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = AppColors.TextPrimary) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings", color = AppColors.TextPrimary) },
+                            onClick = { showMenu = false; navController.navigate("account_settings") },
+                            leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = AppColors.TextPrimary) }
+                        )
+                        HorizontalDivider(color = AppColors.BorderSubtle)
+                        DropdownMenuItem(
+                            text = { Text("Logout", color = AppColors.Error, fontWeight = FontWeight.Bold) },
+                            onClick = { showMenu = false; onLogout() },
+                            leadingIcon = { Icon(Icons.Outlined.Logout, contentDescription = null, tint = AppColors.Error) }
+                        )
+                    }
+                }
             }
 
             Column(

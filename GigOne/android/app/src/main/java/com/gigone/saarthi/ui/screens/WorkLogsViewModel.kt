@@ -26,6 +26,13 @@ class WorkLogsViewModel(application: Application) : AndroidViewModel(application
 
     init {
         loadLogs()
+        
+        // Auto-refresh when Dashboard triggers a new check-in
+        viewModelScope.launch {
+            com.gigone.saarthi.util.EventBus.refreshDataEvent.collect {
+                loadLogs()
+            }
+        }
     }
 
     fun loadLogs() {

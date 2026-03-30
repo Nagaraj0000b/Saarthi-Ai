@@ -14,8 +14,6 @@ if (envFile.exists()) {
 }
 
 val apiUrl = envProperties.getProperty("API_URL", "http://10.0.2.2:5000/api/")
-val ttsUrl = envProperties.getProperty("TTS_URL", "http://10.0.2.2:5050/")
-val ttsApiKey = envProperties.getProperty("TTS_API_KEY", "my_free_project_key")
 
 android {
     namespace = "com.gigone.saarthi"
@@ -29,8 +27,6 @@ android {
         versionName = "1.0"
 
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
-        buildConfigField("String", "TTS_URL", "\"$ttsUrl\"")
-        buildConfigField("String", "TTS_API_KEY", "\"$ttsApiKey\"")
     }
 
     buildTypes {

@@ -143,7 +143,7 @@ fun ManageLanguagesScreen(navController: NavController) {
 fun ManagePlatformsScreen(navController: NavController) {
     val context = LocalContext.current
     var selectedPlatforms by remember { mutableStateOf(TokenManager.getPlatforms(context)) }
-    val allPlatforms = listOf("Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Zepto", "Blinkit", "Porter", "Dunzo", "Shadowfax", "Amazon Flex", "Flipkart Flex", "Borzo", "Delhivery", "Ecom Express")
+    val allPlatforms = listOf("Uber", "Ola", "Swiggy", "Zomato", "Rapido")
 
     Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
         TopAppBar(

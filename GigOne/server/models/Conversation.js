@@ -15,15 +15,11 @@ const mongoose = require("mongoose");
 const messageSchema = new mongoose.Schema({
   role:      { type: String, enum: ["user", "assistant"], required: true },
   text:      { type: String, required: true },
-  /**
-   * AI-Generated Sentiment Analysis
-   * Captured in-realtime during the conversation turn.
-   */
   sentiment: {
-    mood:       String,   // e.g., "happy", "stressed", "tired"
-    score:      Number,   // Normalized score from -1.0 to 1.0
-    summary:    String,   // NLP summary of the user's emotional state
-    suggestion: String,   // AI-provided tip based on current mood
+    mood:       String,
+    score:      Number,
+    summary:    String,
+    suggestion: String,
   },
 }, { timestamps: true });
 

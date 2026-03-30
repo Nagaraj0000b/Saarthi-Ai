@@ -11,6 +11,7 @@ import androidx.lifecycle.viewModelScope
 import com.gigone.saarthi.data.ApiClient
 import com.gigone.saarthi.data.AudioReplyResponse
 import com.gigone.saarthi.data.ChatApi
+import com.gigone.saarthi.data.RecommendationData
 import com.gigone.saarthi.util.TtsPlayer
 import com.gigone.saarthi.util.TokenManager
 import com.gigone.saarthi.util.VoiceRecorder
@@ -68,6 +69,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording.asStateFlow()
 
+    private val _recommendation = MutableStateFlow<RecommendationData?>(null)
+    val recommendation: StateFlow<RecommendationData?> = _recommendation.asStateFlow()
+
+    private val _isRecommendationLoading = MutableStateFlow(false)
+    val isRecommendationLoading: StateFlow<Boolean> = _isRecommendationLoading.asStateFlow()
+
+    private val _recommendationError = MutableStateFlow<String?>(null)
+    val recommendationError: StateFlow<String?> = _recommendationError.asStateFlow()
+
     private val _currentLocationName = MutableStateFlow("Locating...")
     val currentLocationName: StateFlow<String> = _currentLocationName.asStateFlow()
 
@@ -85,6 +95,34 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     fun selectLanguage(lang: String) {
         _selectedLanguage.value = lang
         ctx.getSharedPreferences("saarthi_prefs", 0).edit().putString("language", lang).apply()
+    }
+
+    /** Fetch platform recommendations based on current location. */
+    fun loadRecommendations() {
+        viewModelScope.launch {
+            _isRecommendationLoading.value = true
+            _recommendationError.value = null
+            try {
+                val loc = getCurrentLocation()
+                if (loc == null) {
+                    _recommendationError.value = if (!hasLocationPermission()) {
+                        "Enable location to get platform recommendations."
+                    } else {
+                        "Could not fetch your current location."
+                    }
+                    return@launch
+                }
+
+                val api = ApiClient.buildRetrofit(ctx).create(com.gigone.saarthi.data.ChatApi::class.java)
+                val response = api.getRecommendations(loc.latitude, loc.longitude)
+                _recommendation.value = response.data
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Failed to load recommendations", e)
+                _recommendationError.value = "Couldn't load recommendations. Tap retry."
+            } finally {
+                _isRecommendationLoading.value = false
+            }
+        }
     }
 
     // ─── Session Init (mirrors initChat()) ──────────────────────────────────
@@ -199,6 +237,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 // just like the web app. Reset only after this explicit conclusion is given.
                 if (data.reply.contains("Naya check-in shuru karne ke liye") || data.reply.contains("check-in ho chuka hai")) {
                     conversationId = null
+                    // Trigger auto-refresh on Earnings and History tabs!
+                    com.gigone.saarthi.util.EventBus.triggerRefresh()
                 }
                 
                 val token = TokenManager.getToken(ctx) ?: ""

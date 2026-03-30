@@ -17,6 +17,10 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
+import com.gigone.saarthi.data.RecommendationData
+import com.gigone.saarthi.data.Recommendation
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -47,7 +51,7 @@ data class ChatMessage(val role: String, val text: String)
 @Composable
 fun DashboardScreen(
     vm: DashboardViewModel = viewModel(),
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
 ) {
     val ctx = LocalContext.current
     val userName = TokenManager.getUserName(ctx)
@@ -62,6 +66,53 @@ fun DashboardScreen(
     val isRecording by vm.isRecording.collectAsStateWithLifecycle()
     val selectedLanguage by vm.selectedLanguage.collectAsStateWithLifecycle()
     val currentLocationName by vm.currentLocationName.collectAsStateWithLifecycle()
+    val recommendation: RecommendationData? by vm.recommendation.collectAsStateWithLifecycle()
+    val isRecommendationLoading by vm.isRecommendationLoading.collectAsStateWithLifecycle()
+    val recommendationError by vm.recommendationError.collectAsStateWithLifecycle()
+
+    // ─── Runtime permission launchers ─────────────────────────────────────────
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val micGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        val locGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                         permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        
+        if (locGranted) {
+            vm.refreshLocation()
+            if (recommendation == null) {
+                vm.loadRecommendations()
+            }
+        }
+        if (micGranted) vm.handleMicPressIn()
+    }
+
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                         permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (locGranted) {
+            vm.refreshLocation()
+            vm.loadRecommendations()
+        }
+    }
+
+    // Load recommendations on first launch (Cached by ViewModel)
+    LaunchedEffect(Unit) {
+        if (recommendation == null && !isRecommendationLoading) {
+            if (!vm.hasLocationPermission()) {
+                locationLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            } else {
+                vm.loadRecommendations()
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { vm.resetSession() }
@@ -79,23 +130,7 @@ fun DashboardScreen(
         }
     }
 
-    // ─── Runtime permission launchers ─────────────────────────────────────────
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val micGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
-        if (micGranted) vm.handleMicPressIn()
-    }
-
-    val locationLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestMultiplePermissions()
-    ) { permissions ->
-        val locGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
-                         permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
-        if (locGranted) {
-            vm.refreshLocation()
-        }
-    }
+    // ─── UI state ────────────────────────────────────────────────────────────
 
     // ─── Root layout ─────────────────────────────────────────────────────────
     Box(
@@ -187,35 +222,24 @@ fun DashboardScreen(
                 }
             }
 
-            // ── AVATAR SECTION (Moved back out and tightened) ─────────────────
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // ── RECOMMENDATION CARD (UNDER CONSTRUCTION) ────────────────────────────
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                shape = RoundedCornerShape(16.dp),
+                color = AppColors.BgCard,
+                border = BorderStroke(1.dp, AppColors.BorderSubtle)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp) // Smaller avatar to save space
-                        .clip(CircleShape)
-                        .background(Color(0x1A6C63FF))
-                        .border(1.dp, Color(0x806C63FF), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.gigi_avatar),
-                        contentDescription = "Saarthi AI Avatar",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        "recomandtions will be shown here",
+                        color = AppColors.TextPrimary,
+                        fontSize = 14.sp,
+                        fontWeight = FontWeight.Medium,
+                        modifier = Modifier.align(Alignment.CenterHorizontally)
                     )
                 }
-                Text(
-                    "Saarthi AI",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = AppColors.TextPrimary
-                )
-                Text("Your voice companion", fontSize = 9.sp, color = AppColors.TextSecondary)
             }
 
             // ── CHAT MESSAGE BOX (Expanded) ───────────────────────────────────
@@ -225,11 +249,27 @@ fun DashboardScreen(
                     .weight(1f) // Takes all remaining space
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0x1A6C63FF),
-                tonalElevation = 0.dp
+                color = AppColors.BgCard,
+                tonalElevation = 0.dp,
+                border = BorderStroke(1.dp, AppColors.BorderSubtle)
             ) {
-                Box(
-                    modifier = Modifier.border(1.dp, Color(0x336C63FF), RoundedCornerShape(24.dp))
+                @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+                androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                    isRefreshing = isRecommendationLoading,
+                    onRefresh = { 
+                        if (vm.hasLocationPermission()) {
+                            vm.refreshLocation()
+                            vm.loadRecommendations()
+                        } else {
+                            locationLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     LazyColumn(
                         state = listState,
@@ -245,10 +285,10 @@ fun DashboardScreen(
                                 horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
                             ) {
                                 Text(
-                                    text = if (isUser) "You" else "Saarthi",
+                                    text = if (isUser) "You" else "Assistant",
                                     fontSize = 10.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isUser) AppColors.Accent else AppColors.Primary,
+                                    color = if (isUser) AppColors.TextSecondary else AppColors.Primary,
                                     modifier = Modifier.padding(
                                         start = if (isUser) 0.dp else 6.dp,
                                         end = if (isUser) 6.dp else 0.dp,
@@ -262,12 +302,12 @@ fun DashboardScreen(
                                 )
                                 Surface(
                                     shape = bubbleShape,
-                                    color = if (isUser) Color(0x2600D4AA) else Color(0x336C63FF),
+                                    color = if (isUser) AppColors.BgDeep else AppColors.Primary.copy(alpha = 0.08f),
                                     modifier = Modifier
                                         .widthIn(max = 280.dp)
                                         .border(
                                             1.dp,
-                                            if (isUser) Color(0x4D00D4AA) else Color(0x4D6C63FF),
+                                            if (isUser) AppColors.BorderSubtle else AppColors.Primary.copy(alpha = 0.15f),
                                             bubbleShape
                                         )
                                 ) {

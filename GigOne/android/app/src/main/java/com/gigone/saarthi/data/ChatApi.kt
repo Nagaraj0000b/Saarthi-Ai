@@ -50,4 +50,14 @@ interface ChatApi {
 
     @DELETE("chat/{id}")
     suspend fun deleteSession(@Path("id") id: String)
+
+    /**
+     * Fetches platform recommendations for the next shift.
+     * GET /api/recommendations/next-shift?lat={lat}&lon={lon}
+     */
+    @GET("recommendations/next-shift")
+    suspend fun getRecommendations(
+        @Query("lat") lat: Double,
+        @Query("lon") lon: Double
+    ): RecommendationResponse
 }

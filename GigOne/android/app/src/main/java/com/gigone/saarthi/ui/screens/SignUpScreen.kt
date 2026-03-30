@@ -59,11 +59,11 @@ fun SignUpScreen(
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Row {
-                    Text("Create ", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.TextPrimary)
-                    Text("Account", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.Primary)
+                    Text("Join ", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.TextPrimary)
+                    Text("GigOne", fontSize = 24.sp, fontWeight = FontWeight.ExtraBold, color = AppColors.Primary)
                 }
                 Text(
-                    "Join Saarthi today",
+                    "Start earning smarter today",
                     fontSize = 14.sp,
                     color = AppColors.TextSecondary,
                     modifier = Modifier.padding(top = 4.dp, bottom = 24.dp)

@@ -69,7 +69,7 @@ const getTranslateClient = () => {
 /**
  * Transcribes a local audio file using Google Cloud Speech-to-Text and translates to English.
  * @param {string} filePath - The absolute path to the audio file.
- * @returns {Promise<string>} The transcribed and translated text.
+ * @returns {Promise<Object>} The transcribed and translated text.
  */
 const transcribeAudio = async (filePath, language = null) => {
   if (typeof filePath !== "string" || filePath.trim().length === 0) {
@@ -126,16 +126,15 @@ const transcribeAudio = async (filePath, language = null) => {
     const transcribedText = transcription.trim();
 
     try {
-      // Translate the transcribed text to English
+      // 1. Translate the transcribed text to English meaning for AI context
       const tClient = getTranslateClient();
       const [translation] = await tClient.translate(transcribedText, 'en');
       return {
-        originalText: transcribedText,
-        translatedText: translation
+        originalText: transcribedText, // UI shows Native characters (Hindi/etc)
+        translatedText: translation    // AI still gets English meaning for better extraction
       };
     } catch (translateError) {
       console.error("[GCP Translate Error]:", translateError);
-      // Fallback to transcribed text if translation fails
       return {
         originalText: transcribedText,
         translatedText: transcribedText

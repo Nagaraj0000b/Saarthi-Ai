@@ -37,18 +37,18 @@ const calculateNextShiftTarget = () => {
   const target = new Date(now);
   const hour = now.getHours();
 
-  // Logic:
-  // 1. Morning check-in (before 10 AM) -> Predict for today's Lunch shift (12:00 PM)
-  // 2. Mid-day check-in (10 AM - 3 PM) -> Predict for today's Evening shift (6:00 PM)
-  // 3. Late check-in (after 3 PM) -> Predict for tomorrow's Morning shift (9:00 AM)
+  // Logic for next peak shift:
+  // 1. If currently morning (before 11 AM) -> Predict for Lunch peak (1:00 PM)
+  // 2. If currently mid-day (11 AM - 4 PM) -> Predict for Dinner peak (7:00 PM)
+  // 3. If currently evening/night (after 4 PM) -> Predict for tomorrow's Breakfast peak (8:00 AM)
   
-  if (hour < 10) {
-    target.setHours(12, 0, 0, 0);
-  } else if (hour < 15) {
-    target.setHours(18, 0, 0, 0);
+  if (hour < 11) {
+    target.setHours(13, 0, 0, 0);
+  } else if (hour < 16) {
+    target.setHours(19, 0, 0, 0);
   } else {
     target.setDate(now.getDate() + 1);
-    target.setHours(9, 0, 0, 0);
+    target.setHours(8, 0, 0, 0);
   }
 
   return Math.floor(target.getTime() / 1000);
@@ -225,7 +225,8 @@ const runChatTurn = async ({ conversation, originalText, translatedText, languag
   conversation.messages.push({ role: "user", text: originalText });
 
   if (normalizedValue === null && STEP_CONFIG[currentStep]?.extract) {
-    aiReply = MISSING_VALUE_REPLIES[currentStep] || aiReply;
+    // We let the AI naturally re-ask or apologize via the main prompt logic
+    // rather than using a hardcoded string here. 
   }
 
   applyExtractedValue(conversation, currentStep, normalizedValue);
@@ -235,7 +236,6 @@ const runChatTurn = async ({ conversation, originalText, translatedText, languag
   conversation.step = nextStep;
 
   if (currentStep !== "done" && nextStep === "done") {
-    // Send the full English translation history for burnout calculation if needed
     await calculateAndSaveBurnout(conversation);
     await persistAutoSavedEarnings(userId, conversation.extractedData);
   }
@@ -265,27 +265,11 @@ const startChat = asyncHandler(async (req, res) => {
   const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
   const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
   const vehicles = Array.isArray(req.body.vehicles) ? req.body.vehicles : [];
-  const coordinates = parseCoordinates(req.body.lat, req.body.lon);
-
-  const targetTime = calculateNextShiftTarget();
-  const contextPromise = coordinates
-    ? Promise.all([
-        getWeatherContext(coordinates.lat, coordinates.lon, targetTime),
-        getTraffic(coordinates.lat, coordinates.lon, targetTime),
-      ]).catch((err) => {
-        console.warn("Context fetch failed in startChat:", err.message);
-        return [null, null];
-      })
-    : Promise.resolve([null, null]);
-
-  const [weather, traffic] = await contextPromise;
 
   const context = {
     ...(lastDone?.burnoutStatus ? { burnoutStatus: lastDone.burnoutStatus } : {}),
     platforms,
-    vehicles,
-    weather,
-    traffic
+    vehicles
   };
 
   const greeting = await generateGreeting(user?.name || "buddy", context, language || null);
@@ -315,14 +299,16 @@ const reply = asyncHandler(async (req, res) => {
     const coordinates = parseCoordinates(req.body.lat, req.body.lon);
     const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
     
-    // Multipart fields come as strings. "Uber,Swiggy" -> ["Uber", "Swiggy"]
     const platforms = typeof req.body.platforms === "string" ? req.body.platforms.split(",").filter(Boolean) : [];
     const vehicles = typeof req.body.vehicles === "string" ? req.body.vehicles.split(",").filter(Boolean) : [];
 
     const conversation = await findConversationForUser(conversationId, req.user.userId);
     const targetTime = calculateNextShiftTarget();
 
-    const contextPromise = coordinates
+    // Fetch weather/traffic ONLY if we are at the final step (hours)
+    const shouldFetchContext = conversation.step === "hours" && coordinates;
+
+    const contextPromise = shouldFetchContext
       ? Promise.all([
           getWeatherContext(coordinates.lat, coordinates.lon, targetTime),
           getTraffic(coordinates.lat, coordinates.lon, targetTime),

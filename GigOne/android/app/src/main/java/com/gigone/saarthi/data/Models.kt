@@ -64,6 +64,7 @@ data class DailyMoodData(
     val suggestion: String?,
     val isValid: Boolean = false
 )
+
 data class ChatHistoryLog(
     val _id: String,
     val createdAt: String,
@@ -72,4 +73,31 @@ data class ChatHistoryLog(
     val dailyMood: DailyMoodData? = null,
     val extractedData: ExtractData? = null,
     val messages: List<ChatMessageData> = emptyList()
+)
+
+// ─── Recommendations ─────────────────────────────────────────────────────────
+data class Recommendation(
+    val platform: String,
+    val finalScore: Float,
+    val baseEarningScore: Int,
+    val contextModifier: Float,
+    val wellbeingPenalty: Int,
+    val reason: String
+)
+
+data class RecommendationContext(
+    val weather: Map<String, Any>?,
+    val traffic: String?,
+    val wellbeingRisk: String?
+)
+
+data class RecommendationData(
+    val recommendedPlatform: String,
+    val rankedPlatforms: List<Recommendation>,
+    val context: RecommendationContext
+)
+
+data class RecommendationResponse(
+    val status: String,
+    val data: RecommendationData
 )

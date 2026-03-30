@@ -43,37 +43,39 @@ class AppColorsClass(
     }
 }
 
-val darkColors = AppColorsClass(
-    primary = Color(0xFF6C63FF),
-    accent = Color(0xFF00D4AA),
-    bgDeep = Color(0xFF07080F),
-    bgCard = Color(0xFF131626),
-    textPrimary = Color(0xFFFFFFFF),
-    textSecondary = Color(0xFFA0AABF),
-    textMuted = Color(0xFF6B7280),
-    borderSubtle = Color(0xFF1E243B),
-    error = Color(0xFFEF4444),
+// Upgraded to a Premium, Modern Aesthetic (Slate & Indigo)
+val professionalWhiteColors = AppColorsClass(
+    primary = Color(0xFF4F46E5),       // Deep Premium Indigo (modern tech/fintech primary)
+    accent = Color(0xFF10B981),        // Vibrant Emerald for success and earnings
+    bgDeep = Color(0xFFF8FAFC),        // Slate 50 - Very clean, modern off-white background
+    bgCard = Color(0xFFFFFFFF),        // Pure white for elevated cards
+    textPrimary = Color(0xFF0F172A),     // Slate 900 - Rich near-black for high legibility
+    textSecondary = Color(0xFF475569),   // Slate 600 - Crisp secondary text
+    textMuted = Color(0xFF94A3B8),       // Slate 400 - Muted placeholder text
+    borderSubtle = Color(0xFFE2E8F0),    // Slate 200 - Extremely subtle, clean borders
+    error = Color(0xFFEF4444),         // Vibrant Rose for errors
     success = Color(0xFF10B981)
 )
 
-val lightColors = AppColorsClass(
-    primary = Color(0xFF6C63FF),       // Keep brand purple
-    accent = Color(0xFF00B38F),        // Slightly darker teal for light bg
-    bgDeep = Color(0xFFF3F4F6),        // Light gray background
+// Official Zomato Color Palette
+val zomatoColors = AppColorsClass(
+    primary = Color(0xFFE23744),       // Zomato Red
+    accent = Color(0xFFE23744),        // Accent also red
+    bgDeep = Color(0xFFF4F4F2),        // Light cream/grey background
     bgCard = Color(0xFFFFFFFF),        // White cards
-    textPrimary = Color(0xFF111827),     // Near black text
-    textSecondary = Color(0xFF4B5563),   // Gray text
-    textMuted = Color(0xFF9CA3AF),       // Light gray text
-    borderSubtle = Color(0xFFE5E7EB),    // Very light border
-    error = Color(0xFFEF4444),
-    success = Color(0xFF10B981)
+    textPrimary = Color(0xFF1C1C1C),     // Zomato Dark Grey for text
+    textSecondary = Color(0xFF696969),   // Secondary text grey
+    textMuted = Color(0xFF9C9C9C),       // Muted grey
+    borderSubtle = Color(0xFFE8E8E8),    // Light border
+    error = Color(0xFFE23744),         // Error also using brand red
+    success = Color(0xFF48C479)        // Zomato success green
 )
 
-// The global singleton that Compose will react to
+// Default is now the Zomato theme
 object AppColors {
-    var instance by mutableStateOf(darkColors)
+    var instance by mutableStateOf(zomatoColors)
 
-    // Delegates for easy access across the app (AppColors.Primary instead of AppColors.instance.Primary)
+    // Delegates for easy access across the app
     val Primary get() = instance.Primary
     val Accent get() = instance.Accent
     val BgDeep get() = instance.BgDeep

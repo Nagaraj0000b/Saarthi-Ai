@@ -27,6 +27,13 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
 
     init {
         loadEarnings()
+        
+        // Auto-refresh when Dashboard triggers a new check-in
+        viewModelScope.launch {
+            com.gigone.saarthi.util.EventBus.refreshDataEvent.collect {
+                loadEarnings()
+            }
+        }
     }
 
     fun loadEarnings() {

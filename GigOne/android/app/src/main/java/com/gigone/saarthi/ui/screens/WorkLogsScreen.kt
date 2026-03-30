@@ -35,17 +35,17 @@ import java.util.Locale
 // ═══════════════════════ PLATFORM ICONS (shared logic) ═══════════════════════
 private data class PlatformStyle(val icon: ImageVector, val color: Color)
 
-private fun platformStyle(platform: String): PlatformStyle = when (platform.lowercase()) {
-    "uber" -> PlatformStyle(Icons.Default.LocalTaxi, Color(0xFF276EF1))
-    "ola" -> PlatformStyle(Icons.Default.LocalTaxi, Color(0xFF1C8D3F))
-    "swiggy" -> PlatformStyle(Icons.Default.Fastfood, Color(0xFFFC8019))
-    "zomato" -> PlatformStyle(Icons.Default.Restaurant, Color(0xFFE23744))
-    "rapido" -> PlatformStyle(Icons.Default.TwoWheeler, Color(0xFFFFC72C))
-    "zepto" -> PlatformStyle(Icons.Default.ShoppingBag, Color(0xFF8B2FDB))
-    "blinkit" -> PlatformStyle(Icons.Default.ShoppingCart, Color(0xFFF5C418))
-    "porter" -> PlatformStyle(Icons.Default.LocalShipping, Color(0xFF2B3A4A))
-    "dunzo" -> PlatformStyle(Icons.Default.DeliveryDining, Color(0xFF00D290))
-    else -> PlatformStyle(Icons.Default.Work, AppColors.TextSecondary)
+private fun platformStyle(platform: String): PlatformStyle {
+    val icon = when (platform.lowercase()) {
+        "uber", "ola" -> Icons.Default.LocalTaxi
+        "swiggy", "dunzo" -> Icons.Default.Fastfood
+        "zomato" -> Icons.Default.Restaurant
+        "rapido" -> Icons.Default.TwoWheeler
+        "zepto", "blinkit" -> Icons.Default.ShoppingBag
+        "porter" -> Icons.Default.LocalShipping
+        else -> Icons.Default.Work
+    }
+    return PlatformStyle(icon, AppColors.TextPrimary)
 }
 
 // ═══════════════════════ MOOD HELPERS ═══════════════════════
@@ -53,11 +53,10 @@ private data class MoodVisual(val icon: ImageVector, val label: String, val colo
 
 private fun getMoodVisual(score: Float?): MoodVisual = when {
     score == null -> MoodVisual(Icons.Outlined.SentimentNeutral, "N/A", AppColors.TextMuted)
-    score >= 0.5f -> MoodVisual(Icons.Outlined.SentimentVerySatisfied, "Great", Color(0xFF10B981))
-    score >= 0.1f -> MoodVisual(Icons.Outlined.SentimentSatisfied, "Good", Color(0xFF34D399))
-    score >= -0.1f -> MoodVisual(Icons.Outlined.SentimentNeutral, "Okay", Color(0xFFFBBF24))
-    score >= -0.5f -> MoodVisual(Icons.Outlined.SentimentDissatisfied, "Low", Color(0xFFF97316))
-    else -> MoodVisual(Icons.Outlined.SentimentVeryDissatisfied, "Stressed", Color(0xFFEF4444))
+    score >= 0.1f -> MoodVisual(Icons.Outlined.SentimentSatisfied, "Good", AppColors.TextPrimary)
+    score >= -0.1f -> MoodVisual(Icons.Outlined.SentimentNeutral, "Okay", AppColors.TextPrimary)
+    score >= -0.5f -> MoodVisual(Icons.Outlined.SentimentDissatisfied, "Low", AppColors.TextSecondary)
+    else -> MoodVisual(Icons.Outlined.SentimentVeryDissatisfied, "Stressed", AppColors.Error)
 }
 
 // ═══════════════════════ MAIN SCREEN ═══════════════════════
@@ -68,8 +67,6 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
     val error by vm.error.collectAsStateWithLifecycle()
 
     var selectedLog by remember { mutableStateOf<ChatHistoryLog?>(null) }
-
-    LaunchedEffect(Unit) { vm.loadLogs() }
 
     Column(
         modifier = Modifier
@@ -96,11 +93,11 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
         }
 
         // ── Content ──────────────────────────────────────────────────────
-        if (isLoading) {
+        if (isLoading && logs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.Primary, strokeWidth = 2.5.dp)
             }
-        } else if (error != null) {
+        } else if (error != null && logs.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = AppColors.Error, modifier = Modifier.size(40.dp))
@@ -109,7 +106,7 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
                     Text(error ?: "", color = AppColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
                 }
             }
-        } else if (logs.isEmpty()) {
+        } else if (logs.isEmpty() && !isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.HistoryToggleOff, contentDescription = null, tint = AppColors.TextMuted, modifier = Modifier.size(48.dp))
@@ -119,18 +116,26 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = isLoading,
+                onRefresh = { vm.loadLogs() },
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(logs, key = { it._id }) { log ->
-                    CompactWorkLogCard(
-                        log = log,
-                        onReadTranscript = { selectedLog = log },
-                        onDelete = { vm.deleteLog(log._id) }
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(logs, key = { it._id }) { log ->
+                        CompactWorkLogCard(
+                            log = log,
+                            onReadTranscript = { selectedLog = log },
+                            onDelete = { vm.deleteLog(log._id) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
-                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
@@ -158,8 +163,8 @@ private fun CompactWorkLogCard(log: ChatHistoryLog, onReadTranscript: () -> Unit
     val statusText = log.burnoutStatus?.action ?: "Safe"
     val statusColor = when (statusText) {
         "Rest Required" -> AppColors.Error
-        "Take a Break" -> Color(0xFFFFB347)
-        else -> AppColors.Accent
+        "Take a Break" -> AppColors.TextSecondary
+        else -> AppColors.TextPrimary
     }
     val statusIcon = when (statusText) {
         "Rest Required" -> Icons.Outlined.Warning
@@ -326,7 +331,7 @@ fun TranscriptDialog(log: ChatHistoryLog, onDismiss: () -> Unit) {
                         horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
                     ) {
                         Text(
-                            if (isUser) "You" else "Saarthi",
+                            if (isUser) "You" else "Assistant",
                             color = if (isUser) AppColors.Accent else AppColors.Primary,
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
