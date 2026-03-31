@@ -113,4 +113,16 @@
 **Verification**:
 - Verify new ML API correctly categorizes all 5 types and filters appropriately based on the new skill set param.
 - Verify `vehicle` is safely removed from dataset and ML endpoints.
-- Verify Android UI correctly saves and displays new "Skill Sets" to the server logic.
+---
+
+### Phase 11: Shift History (Work Logs) UI Overhaul
+**Status**: ⬜ Not Started
+**Objective**: Redesign the Work Logs screen to be more visually engaging and professional.
+**Depends on**: Phase 10
+
+**Tasks**:
+- [ ] TBD (run /plan 11 to create)
+
+**Verification**:
+- TBD
+
