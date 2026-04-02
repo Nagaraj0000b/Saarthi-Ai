@@ -31,8 +31,8 @@
   2. The Dashboard and Recommendation screens show correctly labeled job categories and reasoning text.
 
 **Plans**: 2 plans
-- [ ] 05-01-PLAN.md — Foundation & Profile Sync
-- [ ] 05-02-PLAN.md — UI Integration & Category Display
+- [x] 05-01-PLAN.md — Foundation & Profile Sync
+- [x] 05-02-PLAN.md — UI Integration & Category Display
 
 ## Progress
 
