@@ -24,23 +24,56 @@ const getTtsClient = () => {
 };
 
 /**
- * Maps our internal language names to Google Cloud Neural/Standard voice names.
- * Priority: Neural2 > Wavenet > Standard
+ * Normalizes short language codes (e.g., 'hin', 'kan') to full names.
+ */
+const normalizeLanguageName = (lang) => {
+  if (!lang) return "English";
+  const l = lang.toLowerCase().trim();
+  const map = {
+    hin: "Hindi",
+    hindi: "Hindi",
+    kan: "Kannada",
+    kannada: "Kannada",
+    tel: "Telugu",
+    telugu: "Telugu",
+    tam: "Tamil",
+    tamil: "Tamil",
+    mal: "Malayalam",
+    malayalam: "Malayalam",
+    ben: "Bengali",
+    bengali: "Bengali",
+    mar: "Marathi",
+    marathi: "Marathi",
+    pun: "Punjabi",
+    punjabi: "Punjabi",
+    guj: "Gujarati",
+    gujarati: "Gujarati",
+    eng: "English",
+    english: "English",
+  };
+  return map[l] || l;
+};
+
+/**
+ * Maps our internal language names to Google Cloud Premium/Wavenet voice names.
+ * These handle transliterated/phonetic text much better than Standard voices.
  */
 const getVoiceConfig = (languageName) => {
+  const norm = normalizeLanguageName(languageName);
+  
   const languageMap = {
-    English: { languageCode: "en-IN", name: "en-IN-Neural2-A" }, // Female Neural
-    Hindi: { languageCode: "hi-IN", name: "hi-IN-Neural2-D" },   // Female Neural
-    Tamil: { languageCode: "ta-IN", name: "ta-IN-Wavenet-A" },   // Female Wavenet
-    Telugu: { languageCode: "te-IN", name: "te-IN-Standard-A" }, // Female Standard
-    Kannada: { languageCode: "kn-IN", name: "kn-IN-Wavenet-A" }, // Female Wavenet
-    Malayalam: { languageCode: "ml-IN", name: "ml-IN-Wavenet-A" }, // Female Wavenet
-    Marathi: { languageCode: "mr-IN", name: "mr-IN-Wavenet-A" },   // Female Wavenet
-    Bengali: { languageCode: "bn-IN", name: "bn-IN-Wavenet-A" },   // Female Wavenet
-    Gujarati: { languageCode: "gu-IN", name: "gu-IN-Wavenet-A" },  // Female Wavenet
+    English:   { languageCode: "en-IN", name: "en-IN-Wavenet-B" },
+    Hindi:     { languageCode: "hi-IN", name: "hi-IN-Wavenet-B" },
+    Tamil:     { languageCode: "ta-IN", name: "ta-IN-Wavenet-B" },
+    Telugu:    { languageCode: "te-IN", name: "te-IN-Standard-A" }, // No Wavenet B for Telugu, keeping Standard A
+    Kannada:   { languageCode: "kn-IN", name: "kn-IN-Wavenet-A" },
+    Malayalam: { languageCode: "ml-IN", name: "ml-IN-Standard-B" },
+    Marathi:   { languageCode: "mr-IN", name: "mr-IN-Wavenet-A" },
+    Bengali:   { languageCode: "bn-IN", name: "bn-IN-Wavenet-A" },
+    Gujarati:  { languageCode: "gu-IN", name: "gu-IN-Wavenet-A" },
   };
 
-  return languageMap[languageName] || { languageCode: "en-IN", name: "en-IN-Neural2-A" };
+  return languageMap[norm] || { languageCode: "en-IN", name: "en-IN-Wavenet-B" };
 };
 
 /**
@@ -56,10 +89,18 @@ const synthesizeSpeech = async (text, language = "English") => {
 
   const voiceConfig = getVoiceConfig(language);
 
+  // Using SSML (Speech Synthesis Markup Language) tells Google TTS that the 
+  // transliterated English text should be pronounced in the target language.
+  const ssml = `<speak><lang xml:lang="${voiceConfig.languageCode}">${text}</lang></speak>`;
+
   const request = {
-    input: { text },
+    input: { ssml },
     voice: voiceConfig,
-    audioConfig: { audioEncoding: "MP3" },
+    audioConfig: { 
+      audioEncoding: "MP3",
+      speakingRate: 1.15, // Keep slightly faster for conversational feel
+      pitch: 0,
+    },
   };
 
   try {

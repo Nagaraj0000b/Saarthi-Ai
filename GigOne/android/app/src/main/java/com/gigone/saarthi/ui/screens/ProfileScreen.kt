@@ -25,6 +25,9 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.NavController
 import com.gigone.saarthi.ui.theme.AppColors
+import com.gigone.saarthi.ui.theme.zomatoColors
+import com.gigone.saarthi.ui.theme.professionalWhiteColors
+import com.gigone.saarthi.ui.theme.darkColors
 import com.gigone.saarthi.util.TokenManager
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -59,41 +62,48 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
                 .background(AppColors.BgCard)
                 .padding(top = 16.dp, bottom = 24.dp)
         ) {
-            // Top Right Options (Edit, Settings, Logout)
-            Box(modifier = Modifier.align(Alignment.TopEnd).padding(end = 8.dp)) {
-                IconButton(onClick = { showMenu = true }) {
-                    Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = AppColors.TextPrimary)
-                }
-                DropdownMenu(
-                    expanded = showMenu,
-                    onDismissRequest = { showMenu = false },
-                    modifier = Modifier.background(AppColors.BgCard)
-                ) {
-                    DropdownMenuItem(
-                        text = { Text("Edit Profile", color = AppColors.TextPrimary) },
-                        onClick = { showMenu = false; navController.navigate("edit_profile") },
-                        leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = AppColors.TextPrimary) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Settings", color = AppColors.TextPrimary) },
-                        onClick = { showMenu = false; navController.navigate("account_settings") },
-                        leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = AppColors.TextPrimary) }
-                    )
-                    HorizontalDivider(color = AppColors.BorderSubtle)
-                    DropdownMenuItem(
-                        text = { Text("Logout", color = AppColors.Error, fontWeight = FontWeight.Bold) },
-                        onClick = { showMenu = false; onLogout() },
-                        leadingIcon = { Icon(Icons.Outlined.Logout, contentDescription = null, tint = AppColors.Error) }
-                    )
-                }
-            }
-
-            // Back button
-            IconButton(
-                onClick = { navController.popBackStack() },
-                modifier = Modifier.align(Alignment.TopStart).padding(start = 8.dp)
+            // --- Top Navigation Row ---
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
             ) {
-                Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
+                // Back button
+                IconButton(
+                    onClick = { navController.popBackStack() },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
+                }
+
+                // Top Right Options (Edit, Settings, Logout)
+                Box {
+                    IconButton(onClick = { showMenu = true }, modifier = Modifier.size(40.dp)) {
+                        Icon(Icons.Default.MoreVert, contentDescription = "Options", tint = AppColors.TextPrimary)
+                    }
+                    DropdownMenu(
+                        expanded = showMenu,
+                        onDismissRequest = { showMenu = false },
+                        modifier = Modifier.background(AppColors.BgCard)
+                    ) {
+                        DropdownMenuItem(
+                            text = { Text("Edit Profile", color = AppColors.TextPrimary) },
+                            onClick = { showMenu = false; navController.navigate("edit_profile") },
+                            leadingIcon = { Icon(Icons.Outlined.Edit, contentDescription = null, tint = AppColors.TextPrimary) }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Settings", color = AppColors.TextPrimary) },
+                            onClick = { showMenu = false; navController.navigate("account_settings") },
+                            leadingIcon = { Icon(Icons.Outlined.Settings, contentDescription = null, tint = AppColors.TextPrimary) }
+                        )
+                        HorizontalDivider(color = AppColors.BorderSubtle)
+                        DropdownMenuItem(
+                            text = { Text("Logout", color = AppColors.Error, fontWeight = FontWeight.Bold) },
+                            onClick = { showMenu = false; onLogout() },
+                            leadingIcon = { Icon(Icons.Outlined.Logout, contentDescription = null, tint = AppColors.Error) }
+                        )
+                    }
+                }
             }
 
             Column(
@@ -145,15 +155,15 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
             )
             ProfileMenuItem(
                 icon = Icons.Outlined.WorkOutline,
-                title = "Platforms",
-                subtitle = "Apps you are currently working for",
-                onClick = { navController.navigate("manage_platforms") }
+                title = "Jobs",
+                subtitle = "Jobs you are currently working for",
+                onClick = { navController.navigate("manage_jobs") }
             )
             ProfileMenuItem(
-                icon = Icons.Outlined.TwoWheeler,
-                title = "Vehicles",
-                subtitle = "Manage the vehicles you drive",
-                onClick = { navController.navigate("manage_vehicles") }
+                icon = Icons.Outlined.VerifiedUser,
+                title = "Skill Sets",
+                subtitle = "Manage your skills and expertise",
+                onClick = { navController.navigate("manage_skills") }
             )
             ProfileMenuItem(
                 icon = Icons.Outlined.TrackChanges,
@@ -174,6 +184,14 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
             Spacer(Modifier.height(16.dp))
             ProfileSectionHeader("APP SETTINGS")
 
+            var showThemeDialog by remember { mutableStateOf(false) }
+            ProfileMenuItem(
+                icon = Icons.Outlined.Palette,
+                title = "Theme",
+                subtitle = "Switch between Zomato and Professional themes",
+                onClick = { showThemeDialog = true }
+            )
+
             ProfileMenuItem(
                 icon = Icons.Outlined.Logout,
                 title = "Logout",
@@ -183,6 +201,49 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
             )
             
             Spacer(Modifier.height(40.dp))
+
+            if (showThemeDialog) {
+                AlertDialog(
+                    onDismissRequest = { showThemeDialog = false },
+                    containerColor = AppColors.BgCard,
+                    title = { Text("Select Theme", color = AppColors.TextPrimary) },
+                    text = {
+                        Column {
+                            val themes = listOf("Zomato Red", "Professional Indigo", "Dark")
+                            themes.forEach { theme ->
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clickable {
+                                            TokenManager.saveThemeMode(context, theme)
+                                            AppColors.instance = when(theme) {
+                                                "Zomato Red" -> zomatoColors
+                                                "Professional Indigo" -> professionalWhiteColors
+                                                else -> darkColors
+                                            }
+                                            showThemeDialog = false
+                                        }
+                                        .padding(vertical = 12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    RadioButton(
+                                        selected = TokenManager.getThemeMode(context) == theme,
+                                        onClick = null,
+                                        colors = RadioButtonDefaults.colors(selectedColor = AppColors.Primary)
+                                    )
+                                    Spacer(Modifier.width(8.dp))
+                                    Text(theme, color = AppColors.TextPrimary, fontSize = 16.sp)
+                                }
+                            }
+                        }
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { showThemeDialog = false }) {
+                            Text("Close", color = AppColors.Primary)
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -192,7 +253,7 @@ fun ProfileSectionHeader(title: String) {
     Text(
         text = title,
         color = AppColors.TextMuted,
-        fontSize = 12.sp,
+        fontSize = 14.sp,
         fontWeight = FontWeight.Bold,
         letterSpacing = 1.sp,
         modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
@@ -228,7 +289,7 @@ fun ProfileMenuItem(
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = if (isDestructive) AppColors.Error else AppColors.TextPrimary)
                 if (subtitle.isNotEmpty()) {
-                    Text(subtitle, fontSize = 12.sp, color = AppColors.TextSecondary)
+                    Text(subtitle, fontSize = 14.sp, color = AppColors.TextSecondary)
                 }
             }
             if (!isDestructive) {

@@ -1,0 +1,29 @@
+# Dependencies
+node_modules/
+server/node_modules/
+client/node_modules/
+
+# IDEs and Editors
+.idea/
+.vscode/
+*.iml
+
+# Build & Temporary files
+build/
+android/.gradle/
+android/app/build/
+dist/
+tmp/
+.gradle/
+.kotlin/
+
+# Logs and Uploads
+log/
+server/uploads/
+*.log
+
+# OS files
+.DS_Store
+Thumbs.db
+
+ml

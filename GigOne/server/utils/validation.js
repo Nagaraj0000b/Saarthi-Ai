@@ -1,6 +1,11 @@
 const AppError = require("./appError");
 
-const VALID_PLATFORMS = ["Uber", "Swiggy", "Rapido", "Other"];
+const VALID_JOBS = [
+  "Uber", "Ola", "Swiggy", "Zomato", "Blinkit", "Zepto", "Rapido", 
+  "Amazon Flex", "BigBasket", "Delhivery", "BluSmart", "Dunzo", 
+  "Namma Yatri", "BlueDart", "JioMart", "InDriver", "Other"
+];
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 const ensureNonEmptyString = (value, fieldName) => {
@@ -87,34 +92,36 @@ const parseOptionalDate = (value, fieldName = "date") => {
   return parsed;
 };
 
-const normalizePlatform = (value, options = {}) => {
+const normalizeJob = (value, options = {}) => {
   const { required = true } = options;
 
   if (value === undefined || value === null || value === "") {
     if (!required) {
       return undefined;
     }
-
-    throw new AppError("platform is required", 400, { code: "VALIDATION_ERROR" });
+    throw new AppError("job is required", 400, { code: "VALIDATION_ERROR" });
   }
 
   if (typeof value !== "string") {
-    throw new AppError("platform must be a string", 400, { code: "VALIDATION_ERROR" });
+    throw new AppError("job must be a string", 400, { code: "VALIDATION_ERROR" });
   }
 
   const normalized = value.trim();
-  const formatted =
-    normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase();
+  
+  // Find case-insensitive match in our master list
+  const matchedJob = VALID_JOBS.find(
+    (j) => j.toLowerCase() === normalized.toLowerCase()
+  );
 
-  if (!VALID_PLATFORMS.includes(formatted)) {
+  if (!matchedJob) {
     throw new AppError(
-      `platform must be one of: ${VALID_PLATFORMS.join(", ")}`,
+      `job must be one of: ${VALID_JOBS.join(", ")}`,
       400,
       { code: "VALIDATION_ERROR" }
     );
   }
 
-  return formatted;
+  return matchedJob;
 };
 
 const parseOptionalString = (value, fieldName) => {
@@ -158,12 +165,12 @@ const parseCoordinates = (latValue, lonValue, options = {}) => {
 
 module.exports = {
   EMAIL_REGEX,
-  VALID_PLATFORMS,
+  VALID_JOBS,
   ensureEmail,
   ensureMinLengthString,
   ensureNonEmptyString,
   ensureNumber,
-  normalizePlatform,
+  normalizeJob,
   parseCoordinates,
   parseOptionalDate,
   parseOptionalNumber,

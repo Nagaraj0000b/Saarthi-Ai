@@ -9,6 +9,33 @@ const speech = require("@google-cloud/speech");
 const { Translate } = require("@google-cloud/translate").v2;
 const AppError = require("../utils/appError");
 
+// Maps frontend language names → BCP-47 codes for GCP STT
+const LANGUAGE_TO_BCP47 = {
+  kannada: "kn-IN",
+  hindi: "hi-IN",
+  tamil: "ta-IN",
+  telugu: "te-IN",
+  malayalam: "ml-IN",
+  bengali: "bn-IN",
+  gujarati: "gu-IN",
+  marathi: "mr-IN",
+  punjabi: "pa-IN",
+  english: "en-IN",
+};
+
+// All supported language codes (used as alternatives when a primary is set)
+const ALL_LANGUAGE_CODES = ["en-IN", "hi-IN", "kn-IN", "ta-IN", "te-IN", "ml-IN", "bn-IN", "gu-IN", "mr-IN", "pa-IN"];
+
+/**
+ * Resolves the BCP-47 language code from a frontend language name string.
+ * Falls back to "en-IN" if unknown.
+ */
+const resolveBcp47 = (language) => {
+  if (!language) return "en-IN";
+  const key = language.trim().toLowerCase();
+  return LANGUAGE_TO_BCP47[key] || "en-IN";
+};
+
 let speechClient;
 let translateClient;
 
@@ -42,9 +69,9 @@ const getTranslateClient = () => {
 /**
  * Transcribes a local audio file using Google Cloud Speech-to-Text and translates to English.
  * @param {string} filePath - The absolute path to the audio file.
- * @returns {Promise<string>} The transcribed and translated text.
+ * @returns {Promise<Object>} The transcribed and translated text.
  */
-const transcribeAudio = async (filePath) => {
+const transcribeAudio = async (filePath, language = null) => {
   if (typeof filePath !== "string" || filePath.trim().length === 0) {
     throw new AppError("Audio file path is required", 400, { code: "VALIDATION_ERROR" });
   }
@@ -60,14 +87,19 @@ const transcribeAudio = async (filePath) => {
       content: audioBytes,
     };
 
+    // Resolve the primary language. When a user selects Kannada, kn-IN becomes
+    // the primary code — GCP STT strongly biases toward the primary language.
+    const primaryCode = resolveBcp47(language);
+    const alternatives = ALL_LANGUAGE_CODES.filter((c) => c !== primaryCode);
+
     // Configuration for Google STT
     const config = {
       // The frontend sends standard webm/ogg/mp4/m4a blobs depending on the browser.
       // WEBM_OPUS or MP3 are common, but leaving encoding blank allows GCP to auto-detect
-      // for most standard container formats (like FLAC, WAV, MP3, etc). 
+      // for most standard container formats (like FLAC, WAV, MP3, etc).
       // If the audio is raw PCM, encoding needs to be specified.
-      languageCode: "en-IN", // Default to Indian English
-      alternativeLanguageCodes: ["hi-IN", "bn-IN", "ta-IN", "te-IN", "gu-IN", "mr-IN", "kn-IN", "ml-IN"],
+      languageCode: primaryCode,
+      alternativeLanguageCodes: alternatives,
       enableAutomaticPunctuation: true,
     };
 
@@ -94,16 +126,15 @@ const transcribeAudio = async (filePath) => {
     const transcribedText = transcription.trim();
 
     try {
-      // Translate the transcribed text to English
+      // 1. Translate the transcribed text to English meaning for AI context
       const tClient = getTranslateClient();
       const [translation] = await tClient.translate(transcribedText, 'en');
       return {
-        originalText: transcribedText,
-        translatedText: translation
+        originalText: transcribedText, // UI shows Native characters (Hindi/etc)
+        translatedText: translation    // AI still gets English meaning for better extraction
       };
     } catch (translateError) {
       console.error("[GCP Translate Error]:", translateError);
-      // Fallback to transcribed text if translation fails
       return {
         originalText: transcribedText,
         translatedText: transcribedText

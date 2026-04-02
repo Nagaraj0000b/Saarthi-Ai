@@ -1,5 +1,6 @@
 package com.gigone.saarthi.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -32,44 +34,31 @@ import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
 
-// ═══════════════════════ PLATFORM ICON HELPER ═══════════════════════
-internal data class PlatformVisual(val icon: ImageVector, val color: Color)
-
-internal fun getPlatformVisual(platform: String): PlatformVisual = when (platform.lowercase()) {
-    "uber" -> PlatformVisual(Icons.Default.LocalTaxi, Color(0xFF276EF1))
-    "ola" -> PlatformVisual(Icons.Default.LocalTaxi, Color(0xFF1C8D3F))
-    "swiggy" -> PlatformVisual(Icons.Default.Fastfood, Color(0xFFFC8019))
-    "zomato" -> PlatformVisual(Icons.Default.Restaurant, Color(0xFFE23744))
-    "rapido" -> PlatformVisual(Icons.Default.TwoWheeler, Color(0xFFFFC72C))
-    "zepto" -> PlatformVisual(Icons.Default.ShoppingBag, Color(0xFF8B2FDB))
-    "blinkit" -> PlatformVisual(Icons.Default.ShoppingCart, Color(0xFFF5C418))
-    "porter" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFF2B3A4A))
-    "dunzo" -> PlatformVisual(Icons.Default.DeliveryDining, Color(0xFF00D290))
-    "shadowfax" -> PlatformVisual(Icons.Default.DeliveryDining, Color(0xFFFF6B35))
-    "amazon flex" -> PlatformVisual(Icons.Default.Inventory, Color(0xFFFF9900))
-    "flipkart flex" -> PlatformVisual(Icons.Default.Inventory2, Color(0xFF2874F0))
-    "borzo" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFF00B4D8))
-    "delhivery" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFFE41E26))
-    "ecom express" -> PlatformVisual(Icons.Default.LocalShipping, Color(0xFF0B3D91))
-    else -> PlatformVisual(Icons.Default.Work, AppColors.TextSecondary)
-}
+import com.gigone.saarthi.util.getJobVisual
 
 // ═══════════════════════ MAIN SCREEN ═══════════════════════
 @Composable
 fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
+    val ctx = LocalContext.current
     val entries by vm.entries.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val error by vm.error.collectAsStateWithLifecycle()
+    val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
     var showDialog by remember { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<EarningEntry?>(null) }
-
-    LaunchedEffect(Unit) { vm.loadEarnings() }
 
     val totalEarned by remember(entries) { derivedStateOf { entries.sumOf { it.amount.toDouble() }.toFloat() } }
     val totalHours by remember(entries) { derivedStateOf { entries.sumOf { it.hours.toDouble() }.toFloat() } }
     val avgPerHour by remember(totalEarned, totalHours) {
         derivedStateOf { if (totalHours > 0) (totalEarned / totalHours).toInt() else 0 }
+    }
+
+    // ── Error Handling ───────────────────────────────────────────
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(ctx, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
     }
 
     Column(
@@ -95,7 +84,7 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
                 )
                 Text(
                     "${entries.size} entries logged",
-                    fontSize = 12.sp,
+                    fontSize = 14.sp,
                     color = AppColors.TextMuted
                 )
             }
@@ -121,21 +110,21 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
                 icon = Icons.Outlined.AccountBalanceWallet,
                 label = "Earned",
                 value = "₹${totalEarned.toInt()}",
-                color = AppColors.Accent,
+                color = AppColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
             EarningSummaryCard(
                 icon = Icons.Outlined.Schedule,
                 label = "Hours",
                 value = "${totalHours}h",
-                color = AppColors.Primary,
+                color = AppColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
             EarningSummaryCard(
                 icon = Icons.Outlined.TrendingUp,
                 label = "Avg/Hr",
                 value = "₹$avgPerHour",
-                color = Color(0xFFFBBF24),
+                color = AppColors.TextPrimary,
                 modifier = Modifier.weight(1f)
             )
         }
@@ -143,41 +132,49 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
         Spacer(Modifier.height(12.dp))
 
         // ── List ─────────────────────────────────────────────────────────
-        if (isLoading) {
+        if (isLoading && entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.Primary, strokeWidth = 2.5.dp)
             }
-        } else if (error != null) {
+        } else if (errorMessage != null && entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = AppColors.Error, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("Failed to load earnings", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
-                    Text(error ?: "", color = AppColors.TextMuted, fontSize = 12.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
+                    Text(errorMessage ?: "", color = AppColors.TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
                 }
             }
-        } else if (entries.isEmpty()) {
+        } else if (entries.isEmpty() && !isLoading) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.ReceiptLong, contentDescription = null, tint = AppColors.TextMuted, modifier = Modifier.size(48.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("No earnings yet", color = AppColors.TextSecondary, fontWeight = FontWeight.SemiBold)
-                    Text("Tap + to add your first entry", color = AppColors.TextMuted, fontSize = 12.sp)
+                    Text("Tap + to add your first entry", color = AppColors.TextMuted, fontSize = 14.sp)
                 }
             }
         } else {
-            LazyColumn(
-                contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
-                verticalArrangement = Arrangement.spacedBy(6.dp)
+            @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+            androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                isRefreshing = isLoading,
+                onRefresh = { vm.loadEarnings() },
+                modifier = Modifier.fillMaxSize()
             ) {
-                items(entries, key = { it._id }) { entry ->
-                    CompactEarningCard(
-                        entry = entry,
-                        onEdit = { editingEntry = entry; showDialog = true },
-                        onDelete = { vm.deleteEarning(entry._id) }
-                    )
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize(),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    items(entries, key = { it._id }) { entry ->
+                        CompactEarningCard(
+                            entry = entry,
+                            onEdit = { editingEntry = entry; showDialog = true },
+                            onDelete = { vm.deleteEarning(entry._id) }
+                        )
+                    }
+                    item { Spacer(Modifier.height(16.dp)) }
                 }
-                item { Spacer(Modifier.height(16.dp)) }
             }
         }
     }
@@ -186,8 +183,8 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
         EarningDialog(
             entry = editingEntry,
             onDismiss = { showDialog = false },
-            onSave = { date, platform, amount, hours ->
-                val req = EarningRequest(date, platform, amount, hours)
+            onSave = { date, job, amount, hours ->
+                val req = EarningRequest(date, job, amount, hours)
                 if (editingEntry == null) {
                     vm.addEarning(req) { showDialog = false }
                 } else {
@@ -220,7 +217,7 @@ private fun EarningSummaryCard(
             Icon(icon, contentDescription = null, tint = color.copy(alpha = 0.7f), modifier = Modifier.size(18.dp))
             Spacer(Modifier.height(6.dp))
             Text(value, fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = color)
-            Text(label, fontSize = 10.sp, color = AppColors.TextMuted)
+            Text(label, fontSize = 14.sp, color = AppColors.TextMuted)
         }
     }
 }
@@ -228,7 +225,7 @@ private fun EarningSummaryCard(
 // ═══════════════════════ COMPACT EARNING CARD ═══════════════════════
 @Composable
 private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete: () -> Unit) {
-    val visual = getPlatformVisual(entry.platform)
+    val visual = getJobVisual(entry.actualJob)
 
     Surface(
         color = AppColors.BgCard,
@@ -250,7 +247,7 @@ private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete
                     .background(visual.color.copy(alpha = 0.12f)),
                 contentAlignment = Alignment.Center
             ) {
-                Icon(visual.icon, contentDescription = entry.platform, tint = visual.color, modifier = Modifier.size(20.dp))
+                Icon(visual.icon, contentDescription = entry.actualJob, tint = visual.color, modifier = Modifier.size(20.dp))
             }
 
             Spacer(Modifier.width(12.dp))
@@ -259,7 +256,7 @@ private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete
             Column(modifier = Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
-                        entry.platform,
+                        entry.actualJob,
                         fontWeight = FontWeight.Bold,
                         color = AppColors.TextPrimary,
                         fontSize = 14.sp,
@@ -270,13 +267,13 @@ private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete
                     Text(
                         formatDate(entry.date),
                         color = AppColors.TextMuted,
-                        fontSize = 11.sp
+                        fontSize = 14.sp
                     )
                 }
                 Text(
                     "${entry.hours}h • ₹${if (entry.hours > 0) (entry.amount / entry.hours).toInt() else 0}/hr",
                     color = AppColors.TextMuted,
-                    fontSize = 11.sp,
+                    fontSize = 14.sp,
                     modifier = Modifier.padding(top = 2.dp)
                 )
             }
@@ -316,9 +313,17 @@ private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete
 // ═══════════════════════ EARNING DIALOG ═══════════════════════
 @Composable
 fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, String, Float, Float) -> Unit) {
-    val platforms = listOf("Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Zepto", "Blinkit", "Porter", "Dunzo", "Other")
+    val jobs = listOf(
+        "Uber", "Ola", "Swiggy", "Zomato", "Blinkit", "Zepto", "Rapido", 
+        "Amazon Flex", "BigBasket", "Delhivery", "BluSmart", "Dunzo", 
+        "Namma Yatri", "BlueDart", "JioMart", "InDriver",
+        "Urban Company", "Local Plumber", "Local Electrician", "Home Cleaning Co",
+        "Elderly Care", "Pet Walker",
+        "DataEntry Inc", "SupportHero", "Virtual Assistant Hub", "Translation Pro",
+        "Other"
+    )
 
-    var platform by remember { mutableStateOf(entry?.platform ?: "Uber") }
+    var job by remember { mutableStateOf(entry?.job ?: "Uber") }
     var amount by remember { mutableStateOf(entry?.amount?.toInt()?.toString() ?: "") }
     var hours by remember { mutableStateOf(entry?.hours?.toString() ?: "") }
     var date by remember { mutableStateOf(entry?.date?.take(10) ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
@@ -347,21 +352,21 @@ fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, 
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                // Platform selector — cycling through list
-                val visual = getPlatformVisual(platform)
+                // Job selector — cycling through list
+                val visual = getJobVisual(job)
                 OutlinedTextField(
-                    value = platform,
+                    value = job,
                     onValueChange = {},
                     readOnly = true,
-                    label = { Text("Platform (Tap to change)", color = AppColors.TextMuted) },
+                    label = { Text("Job (Tap to change)", color = AppColors.TextMuted) },
                     leadingIcon = {
                         Icon(visual.icon, contentDescription = null, tint = visual.color, modifier = Modifier.size(20.dp))
                     },
                     modifier = Modifier
                         .fillMaxWidth()
                         .clickable {
-                            val next = platforms[(platforms.indexOf(platform) + 1) % platforms.size]
-                            platform = next
+                            val next = jobs[(jobs.indexOf(job) + 1) % jobs.size]
+                            job = next
                         },
                     shape = RoundedCornerShape(14.dp),
                     colors = OutlinedTextFieldDefaults.colors(
@@ -414,7 +419,7 @@ fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, 
                 onClick = {
                     val amt = amount.toFloatOrNull() ?: return@Button
                     val hrs = hours.toFloatOrNull() ?: return@Button
-                    onSave(date, platform, amt, hrs)
+                    onSave(date, job, amt, hrs)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
                 shape = RoundedCornerShape(12.dp)

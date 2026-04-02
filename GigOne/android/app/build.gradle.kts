@@ -14,8 +14,6 @@ if (envFile.exists()) {
 }
 
 val apiUrl = envProperties.getProperty("API_URL", "http://10.0.2.2:5000/api/")
-val ttsUrl = envProperties.getProperty("TTS_URL", "http://10.0.2.2:5050/")
-val ttsApiKey = envProperties.getProperty("TTS_API_KEY", "my_free_project_key")
 
 android {
     namespace = "com.gigone.saarthi"
@@ -29,8 +27,6 @@ android {
         versionName = "1.0"
 
         buildConfigField("String", "API_URL", "\"$apiUrl\"")
-        buildConfigField("String", "TTS_URL", "\"$ttsUrl\"")
-        buildConfigField("String", "TTS_API_KEY", "\"$ttsApiKey\"")
     }
 
     buildTypes {
@@ -81,6 +77,10 @@ dependencies {
 
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.9.0")
+
+    // Location Services
+    implementation("com.google.android.gms:play-services-location:21.3.0")
 
     // Core AndroidX
     implementation("androidx.core:core-ktx:1.15.0")

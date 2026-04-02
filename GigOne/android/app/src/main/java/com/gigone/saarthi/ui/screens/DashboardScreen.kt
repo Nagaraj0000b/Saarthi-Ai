@@ -1,6 +1,7 @@
 package com.gigone.saarthi.ui.screens
 
 import android.Manifest
+import android.widget.Toast
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.*
@@ -14,8 +15,11 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.LocationOn
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -23,6 +27,8 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -31,13 +37,14 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gigone.saarthi.R
+import com.gigone.saarthi.data.RecommendationData
+import com.gigone.saarthi.data.Recommendation
+import com.gigone.saarthi.util.getJobVisual
+
+import com.gigone.saarthi.data.ChatMessage
 import com.gigone.saarthi.ui.theme.AppColors
-import kotlinx.coroutines.launch
-
-/** Data class for a single check-in message. */
 import com.gigone.saarthi.util.TokenManager
-
-data class ChatMessage(val role: String, val text: String)
+import kotlinx.coroutines.launch
 
 /**
  * DashboardScreen — fully wired to DashboardViewModel.
@@ -46,20 +53,92 @@ data class ChatMessage(val role: String, val text: String)
 @Composable
 fun DashboardScreen(
     vm: DashboardViewModel = viewModel(),
-    onProfileClick: () -> Unit = {}
+    onProfileClick: () -> Unit = {},
+    onJobRecommendationsClick: () -> Unit = {},
+    onManageJobsClick: () -> Unit = {}
 ) {
     val ctx = LocalContext.current
+    val haptic = LocalHapticFeedback.current
     val userName = TokenManager.getUserName(ctx)
+    
+    // ─── Intent Sender Launcher for System GPS ──────────────────────────────
+    val gpsLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK) {
+            vm.loadRecommendations()
+        }
+    }
     
     val LANGUAGES = remember { 
         val prefs = TokenManager.getSelectedLanguages(ctx).toList().sorted()
         if (prefs.isEmpty()) listOf("English", "Hindi") else prefs
     }
     // ─── Collect state ───────────────────────────────────────────────────────
-    val messages by vm.messages.collectAsStateWithLifecycle()
-    val isProcessing by vm.isProcessing.collectAsStateWithLifecycle()
-    val isRecording by vm.isRecording.collectAsStateWithLifecycle()
-    val selectedLanguage by vm.selectedLanguage.collectAsStateWithLifecycle()
+    val messages: List<ChatMessage> by vm.messages.collectAsStateWithLifecycle()
+    val isProcessing: Boolean by vm.isProcessing.collectAsStateWithLifecycle()
+    val isRecording: Boolean by vm.isRecording.collectAsStateWithLifecycle()
+    val selectedLanguage: String by vm.selectedLanguage.collectAsStateWithLifecycle()
+    val currentLocationName: String by vm.currentLocationName.collectAsStateWithLifecycle()
+    val recommendation: RecommendationData? by vm.recommendation.collectAsStateWithLifecycle()
+    val isRecommendationLoading: Boolean by vm.isRecommendationLoading.collectAsStateWithLifecycle()
+    val recommendationError: String? by vm.recommendationError.collectAsStateWithLifecycle()
+    val errorMessage: String? by vm.errorMessage.collectAsStateWithLifecycle()
+
+    // ─── Error Handling ──────────────────────────────────────────────────────
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(ctx, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
+    }
+
+    // ─── Runtime permission launchers ─────────────────────────────────────────
+    val permissionLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val micGranted = permissions[Manifest.permission.RECORD_AUDIO] ?: false
+        val locGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                         permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        
+        if (locGranted) {
+            vm.refreshLocation()
+            if (recommendation == null) {
+                vm.loadRecommendations(onLocationDisabled = { gpsLauncher.launch(it) })
+            }
+        }
+        if (micGranted) {
+            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+            vm.handleMicPressIn()
+        }
+    }
+
+    val locationLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { permissions ->
+        val locGranted = permissions[Manifest.permission.ACCESS_FINE_LOCATION] == true ||
+                         permissions[Manifest.permission.ACCESS_COARSE_LOCATION] == true
+        if (locGranted) {
+            vm.refreshLocation()
+            vm.loadRecommendations(onLocationDisabled = { gpsLauncher.launch(it) })
+        }
+    }
+
+    // Load recommendations on first launch (Cached by ViewModel)
+    LaunchedEffect(Unit) {
+        if (recommendation == null && !isRecommendationLoading) {
+            if (!vm.hasLocationPermission()) {
+                locationLauncher.launch(
+                    arrayOf(
+                        Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION
+                    )
+                )
+            } else {
+                vm.loadRecommendations(onLocationDisabled = { gpsLauncher.launch(it) })
+            }
+        }
+    }
 
     DisposableEffect(Unit) {
         onDispose { vm.resetSession() }
@@ -77,13 +156,7 @@ fun DashboardScreen(
         }
     }
 
-    // ─── Runtime permission launcher ─────────────────────────────────────────
-    val permissionLauncher = rememberLauncherForActivityResult(
-        ActivityResultContracts.RequestPermission()
-    ) { granted ->
-        if (granted) vm.handleMicPressIn()
-        // If denied, do nothing — user will see the button disabled
-    }
+    // ─── UI state ────────────────────────────────────────────────────────────
 
     // ─── Root layout ─────────────────────────────────────────────────────────
     Box(
@@ -102,71 +175,238 @@ fun DashboardScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 8.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 // Left: Language Pill
                 Surface(
-                    shape = RoundedCornerShape(16.dp),
+                    shape = RoundedCornerShape(12.dp),
                     color = Color(0x0DFFFFFF),
                     modifier = Modifier.clickable { showLangPicker = true }
                 ) {
+                    val shortLang = selectedLanguage.take(3).uppercase()
                     Text(
-                        "🌐 $selectedLanguage ▼",
+                        "🌐 $shortLang ▼",
                         color = AppColors.Accent,
                         fontSize = 14.sp,
                         fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
                     )
                 }
 
-                // Right: Profile Icon (Navigates to Swiggy-style Profile screen)
-                IconButton(
-                    onClick = onProfileClick,
-                    modifier = Modifier
-                        .size(42.dp)
-                        .clip(CircleShape)
-                        .background(Color(0x1A6C63FF))
-                ) {
-                    Icon(
-                        Icons.Default.Person,
-                        contentDescription = "Profile",
-                        tint = AppColors.Primary,
-                        modifier = Modifier.size(24.dp)
-                    )
+                // Right side: Location + Profile
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // Location Pill
+                    Row(
+                        modifier = Modifier
+                            .clickable {
+                                if (vm.hasLocationPermission()) {
+                                    vm.refreshLocation()
+                                    vm.checkLocationSettings(
+                                        onResolutionRequired = { gpsLauncher.launch(it) },
+                                        onAlreadyEnabled = { /* Already on */ }
+                                    )
+                                } else {
+                                    locationLauncher.launch(
+                                        arrayOf(
+                                            Manifest.permission.ACCESS_FINE_LOCATION,
+                                            Manifest.permission.ACCESS_COARSE_LOCATION
+                                        )
+                                    )
+                                }
+                            }
+                            .padding(end = 10.dp), // Reverted strictly to start/end padding to fix profile layout
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.LocationOn,
+                            contentDescription = "Location",
+                            tint = AppColors.Accent,
+                            modifier = Modifier.size(16.dp)
+                        )
+                        Spacer(Modifier.width(4.dp))
+                        Text(
+                            currentLocationName,
+                            color = AppColors.TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Medium
+                        )
+                    }
+
+                    // Right: Profile Icon (Navigates to Swiggy-style Profile screen)
+                    IconButton(
+                        onClick = onProfileClick,
+                        modifier = Modifier
+                            .size(42.dp)
+                            .clip(CircleShape)
+                            .background(Color(0x1A6C63FF))
+                    ) {
+                        Icon(
+                            Icons.Default.Person,
+                            contentDescription = "Profile",
+                            tint = AppColors.Primary,
+                            modifier = Modifier.size(24.dp)
+                        )
+                    }
                 }
             }
 
-            // ── AVATAR SECTION (Moved back out and tightened) ─────────────────
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
+            // ── RECOMMENDATION CARD (ML-Powered) ────────────────────────────
+            Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(vertical = 4.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)
+                    .clickable { onJobRecommendationsClick() },
+                shape = RoundedCornerShape(16.dp),
+                color = AppColors.BgCard,
+                border = BorderStroke(1.dp, AppColors.BorderSubtle)
             ) {
-                Box(
-                    modifier = Modifier
-                        .size(48.dp) // Smaller avatar to save space
-                        .clip(CircleShape)
-                        .background(Color(0x1A6C63FF))
-                        .border(1.dp, Color(0x806C63FF), CircleShape),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Image(
-                        painter = painterResource(id = R.drawable.gigi_avatar),
-                        contentDescription = "Saarthi AI Avatar",
-                        modifier = Modifier.fillMaxSize(),
-                        contentScale = ContentScale.Crop
-                    )
+                Column(modifier = Modifier.padding(16.dp)) {
+                    if (isRecommendationLoading) {
+                        // Loading state
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.Center,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            CircularProgressIndicator(
+                                color = AppColors.Primary,
+                                modifier = Modifier.size(16.dp),
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(Modifier.width(8.dp))
+                            Text("Analyzing best jobs...", color = AppColors.TextSecondary, fontSize = 14.sp)
+                        }
+                    } else if (recommendation != null) {
+                        val data = recommendation!!
+                        val compatibleJobs = data.rankedJobs.filter { it.isCompatible != false }
+
+                        // ── ENGINE BADGE ──
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Text(
+                                "BEST JOB RIGHT NOW",
+                                color = AppColors.Accent,
+                                fontSize = 14.sp,
+                                fontWeight = FontWeight.ExtraBold,
+                                letterSpacing = 1.sp
+                            )
+                            Surface(
+                                color = AppColors.Primary.copy(alpha = 0.15f),
+                                shape = RoundedCornerShape(6.dp)
+                            ) {
+                                Text(
+                                    if (data.engine == "ml_xgboost_v1") "AI ⚡" else "RULES",
+                                    color = AppColors.Primary,
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                )
+                            }
+                        }
+
+                        Spacer(Modifier.height(10.dp))
+
+                        // ── TOP RECOMMENDATION ──
+                        if (compatibleJobs.isNotEmpty()) {
+                            val topJob = compatibleJobs[0]
+                            val visual = getJobVisual(topJob.job)
+                            Surface(
+                                color = AppColors.Primary.copy(alpha = 0.08f),
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, AppColors.Primary.copy(alpha = 0.2f))
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    // Job Icon
+                                    Surface(
+                                        color = AppColors.Primary.copy(alpha = 0.15f),
+                                        shape = RoundedCornerShape(10.dp)
+                                    ) {
+                                        Icon(
+                                            visual.icon,
+                                            contentDescription = topJob.job,
+                                            tint = AppColors.Primary,
+                                            modifier = Modifier
+                                                .padding(8.dp)
+                                                .size(24.dp)
+                                        )
+                                    }
+                                    Spacer(Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            topJob.job,
+                                            color = AppColors.TextPrimary,
+                                            fontSize = 16.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                        if (!topJob.jobType.isNullOrEmpty()) {
+                                            Text(
+                                                topJob.jobType!!,
+                                                color = AppColors.TextSecondary,
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.SemiBold,
+                                                modifier = Modifier.padding(top = 2.dp)
+                                            )
+                                        }
+                                        Text(
+                                            topJob.reason.ifEmpty { "Best earning potential" },
+                                            color = AppColors.Accent,
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Medium,
+                                            modifier = Modifier.padding(top = 2.dp)
+                                        )
+                                    }
+                                    // Earning badge
+                                    Column(horizontalAlignment = Alignment.End) {
+                                        Text(
+                                            "₹${topJob.finalScore.toInt()}",
+                                            color = AppColors.Accent,
+                                            fontSize = 18.sp,
+                                            fontWeight = FontWeight.ExtraBold
+                                        )
+                                        Text(
+                                            "/hr",
+                                            color = AppColors.TextSecondary,
+                                            fontSize = 14.sp
+                                        )
+                                    }
+                                }
+                            }
+
+                            // ── ALTERNATIVES (Removed per UI Phase 6) ──
+                        }
+                    } else if (recommendationError != null) {
+                        if (recommendationError == "NO_JOBS_SELECTED") {
+                            com.gigone.saarthi.ui.components.EmptyDashboardIllustration(
+                                onSetupClick = onManageJobsClick,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                            )
+                        } else {
+                            Text(
+                                "Could not load recommendations",
+                                color = AppColors.TextSecondary,
+                                fontSize = 14.sp,
+                                modifier = Modifier.align(Alignment.CenterHorizontally)
+                            )
+                        }
+                    } else {
+                        Text(
+                            "Pull down to get job recommendations",
+                            color = AppColors.TextSecondary,
+                            fontSize = 14.sp,
+                            modifier = Modifier.align(Alignment.CenterHorizontally)
+                        )
+                    }
                 }
-                Text(
-                    "Saarthi AI",
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.ExtraBold,
-                    color = AppColors.TextPrimary
-                )
-                Text("Your voice companion", fontSize = 9.sp, color = AppColors.TextSecondary)
             }
 
             // ── CHAT MESSAGE BOX (Expanded) ───────────────────────────────────
@@ -176,11 +416,28 @@ fun DashboardScreen(
                     .weight(1f) // Takes all remaining space
                     .padding(horizontal = 16.dp, vertical = 4.dp),
                 shape = RoundedCornerShape(24.dp),
-                color = Color(0x1A6C63FF),
-                tonalElevation = 0.dp
+                color = AppColors.BgCard,
+                tonalElevation = 0.dp,
+                border = BorderStroke(1.dp, AppColors.BorderSubtle)
             ) {
-                Box(
-                    modifier = Modifier.border(1.dp, Color(0x336C63FF), RoundedCornerShape(24.dp))
+                @OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+                androidx.compose.material3.pulltorefresh.PullToRefreshBox(
+                    isRefreshing = isRecommendationLoading,
+                    onRefresh = { 
+                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        if (vm.hasLocationPermission()) {
+                            vm.refreshLocation()
+                            vm.loadRecommendations(onLocationDisabled = { gpsLauncher.launch(it) })
+                        } else {
+                            locationLauncher.launch(
+                                arrayOf(
+                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                )
+                            )
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     LazyColumn(
                         state = listState,
@@ -196,10 +453,10 @@ fun DashboardScreen(
                                 horizontalAlignment = if (isUser) Alignment.End else Alignment.Start
                             ) {
                                 Text(
-                                    text = if (isUser) "You" else "Saarthi",
-                                    fontSize = 10.sp,
+                                    text = if (isUser) "You" else "Assistant",
+                                    fontSize = 14.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isUser) AppColors.Accent else AppColors.Primary,
+                                    color = if (isUser) AppColors.TextSecondary else AppColors.Primary,
                                     modifier = Modifier.padding(
                                         start = if (isUser) 0.dp else 6.dp,
                                         end = if (isUser) 6.dp else 0.dp,
@@ -213,12 +470,12 @@ fun DashboardScreen(
                                 )
                                 Surface(
                                     shape = bubbleShape,
-                                    color = if (isUser) Color(0x2600D4AA) else Color(0x336C63FF),
+                                    color = if (isUser) AppColors.BgDeep else AppColors.Primary.copy(alpha = 0.08f),
                                     modifier = Modifier
                                         .widthIn(max = 280.dp)
                                         .border(
                                             1.dp,
-                                            if (isUser) Color(0x4D00D4AA) else Color(0x4D6C63FF),
+                                            if (isUser) AppColors.BorderSubtle else AppColors.Primary.copy(alpha = 0.15f),
                                             bubbleShape
                                         )
                                 ) {
@@ -255,7 +512,7 @@ fun DashboardScreen(
                             else         -> "HOLD TO SPEAK"
                         },
                         color = if (isRecording) AppColors.Accent else AppColors.TextSecondary,
-                        fontSize = 11.sp,
+                        fontSize = 14.sp,
                         fontWeight = FontWeight.ExtraBold,
                         letterSpacing = 1.5.sp,
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp)
@@ -284,13 +541,21 @@ fun DashboardScreen(
                                     onPress = {
                                         // Press down → start recording (request permission if needed)
                                         if (vm.hasAudioPermission()) {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                             vm.handleMicPressIn()
                                         } else {
-                                            permissionLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                                            permissionLauncher.launch(
+                                                arrayOf(
+                                                    Manifest.permission.RECORD_AUDIO,
+                                                    Manifest.permission.ACCESS_FINE_LOCATION,
+                                                    Manifest.permission.ACCESS_COARSE_LOCATION
+                                                )
+                                            )
                                         }
                                         // Wait for release
                                         tryAwaitRelease()
                                         // Release → send audio
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         vm.handleMicPressOut()
                                     }
                                 )

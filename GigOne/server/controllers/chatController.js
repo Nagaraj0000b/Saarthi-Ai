@@ -21,9 +21,38 @@ const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
 const {
   ensureNonEmptyString,
-  normalizePlatform,
+  normalizeJob,
   parseCoordinates,
 } = require("../utils/validation");
+
+/**
+ * Calculates the Unix timestamp (seconds) for the "Next Shift" target.
+ * Logic:
+ * - After 16:00 (4 PM) -> Tomorrow 09:00 AM
+ * - Before 12:00 (Noon) -> Today 18:00 (6 PM)
+ * - Mid-day: +12 hours
+ */
+const calculateNextShiftTarget = () => {
+  const now = new Date();
+  const target = new Date(now);
+  const hour = now.getHours();
+
+  // Logic for next peak shift:
+  // 1. If currently morning (before 11 AM) -> Predict for Lunch peak (1:00 PM)
+  // 2. If currently mid-day (11 AM - 4 PM) -> Predict for Dinner peak (7:00 PM)
+  // 3. If currently evening/night (after 4 PM) -> Predict for tomorrow's Breakfast peak (8:00 AM)
+  
+  if (hour < 11) {
+    target.setHours(13, 0, 0, 0);
+  } else if (hour < 16) {
+    target.setHours(19, 0, 0, 0);
+  } else {
+    target.setDate(now.getDate() + 1);
+    target.setHours(8, 0, 0, 0);
+  }
+
+  return Math.floor(target.getTime() / 1000);
+};
 
 const TEXT_TO_NUM = {
   half: 0.5,
@@ -42,14 +71,14 @@ const TEXT_TO_NUM = {
 };
 
 const STEP_FIELD_MAPPING = {
-  platform: "platform",
+  job: "job",
   earnings: "earnings",
   hours: "hours",
 };
 
 const MISSING_VALUE_REPLIES = {
-  platform:
-    "Main theek se samajh nahi paaya ki aapne aaj kis platform par kaam kiya. Kya aap dobara bata sakte hain? (Uber, Swiggy, Rapido ya Other?)",
+  job:
+    "Main theek se samajh nahi paaya ki aajne kis job par kaam kiya. Kya aap dobara bata sakte hain? (Uber, Swiggy, Rapido ya Other?)",
   earnings: "Sorry, aapki aaj ki total earnings miss ho gayi. Kya aap amount dobara bata sakte ho?",
   hours: "Sorry, total working hours miss ho gaye. Kya aap hours dobara bata sakte ho?",
 };
@@ -98,9 +127,9 @@ const normalizeExtractedValue = (currentStep, extractedValue) => {
     return null;
   }
 
-  if (currentStep === "platform") {
+  if (currentStep === "job") {
     try {
-      return normalizePlatform(String(extractedValue));
+      return normalizeJob(String(extractedValue));
     } catch (error) {
       return null;
     }
@@ -143,14 +172,14 @@ const calculateAndSaveBurnout = async (conversation) => {
 };
 
 const persistAutoSavedEarnings = async (userId, extractedData) => {
-  if (!extractedData?.platform || extractedData.earnings === undefined || extractedData.earnings === null) {
+  if (!extractedData?.job || extractedData.earnings === undefined || extractedData.earnings === null) {
     return;
   }
 
   try {
     await EarningsEntry.create({
       userId,
-      platform: normalizePlatform(extractedData.platform),
+      job: normalizeJob(extractedData.job),
       amount: Number(extractedData.earnings) || 0,
       hours: Number(extractedData.hours) || 0,
     });
@@ -196,7 +225,8 @@ const runChatTurn = async ({ conversation, originalText, translatedText, languag
   conversation.messages.push({ role: "user", text: originalText });
 
   if (normalizedValue === null && STEP_CONFIG[currentStep]?.extract) {
-    aiReply = MISSING_VALUE_REPLIES[currentStep] || aiReply;
+    // We let the AI naturally re-ask or apologize via the main prompt logic
+    // rather than using a hardcoded string here. 
   }
 
   applyExtractedValue(conversation, currentStep, normalizedValue);
@@ -206,7 +236,6 @@ const runChatTurn = async ({ conversation, originalText, translatedText, languag
   conversation.step = nextStep;
 
   if (currentStep !== "done" && nextStep === "done") {
-    // Send the full English translation history for burnout calculation if needed
     await calculateAndSaveBurnout(conversation);
     await persistAutoSavedEarnings(userId, conversation.extractedData);
   }
@@ -218,9 +247,11 @@ const runChatTurn = async ({ conversation, originalText, translatedText, languag
 
 const getContext = asyncHandler(async (req, res) => {
   const coordinates = parseCoordinates(req.query.lat, req.query.lon, { required: true });
+  const targetTime = calculateNextShiftTarget();
+
   const [weather, traffic] = await Promise.all([
-    getWeatherContext(coordinates.lat, coordinates.lon),
-    getTraffic(coordinates.lat, coordinates.lon),
+    getWeatherContext(coordinates.lat, coordinates.lon, targetTime),
+    getTraffic(coordinates.lat, coordinates.lon, targetTime),
   ]);
 
   res.json({ weather, traffic });
@@ -233,12 +264,12 @@ const startChat = asyncHandler(async (req, res) => {
   
   const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
   const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
-  const vehicles = Array.isArray(req.body.vehicles) ? req.body.vehicles : [];
+  const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
 
   const context = {
     ...(lastDone?.burnoutStatus ? { burnoutStatus: lastDone.burnoutStatus } : {}),
     platforms,
-    vehicles
+    skills
   };
 
   const greeting = await generateGreeting(user?.name || "buddy", context, language || null);
@@ -266,24 +297,30 @@ const reply = asyncHandler(async (req, res) => {
   try {
     const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
     const coordinates = parseCoordinates(req.body.lat, req.body.lon);
-    const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+    const transcriptionLanguage = typeof req.body.language === "string" ? req.body.language.trim() : null;
     
-    // Multipart fields come as strings. "Uber,Swiggy" -> ["Uber", "Swiggy"]
     const platforms = typeof req.body.platforms === "string" ? req.body.platforms.split(",").filter(Boolean) : [];
-    const vehicles = typeof req.body.vehicles === "string" ? req.body.vehicles.split(",").filter(Boolean) : [];
+    const skills = typeof req.body.skills === "string" ? req.body.skills.split(",").filter(Boolean) : [];
 
     const conversation = await findConversationForUser(conversationId, req.user.userId);
+    const targetTime = calculateNextShiftTarget();
 
-    const weatherPromise = coordinates
-      ? getWeatherContext(coordinates.lat, coordinates.lon).catch((error) => {
-          console.warn("Weather context fetch failed during chat:", error.message);
-          return null;
+    // Fetch weather/traffic ONLY if we are at the final step (hours)
+    const shouldFetchContext = conversation.step === "hours" && coordinates;
+
+    const contextPromise = shouldFetchContext
+      ? Promise.all([
+          getWeatherContext(coordinates.lat, coordinates.lon, targetTime),
+          getTraffic(coordinates.lat, coordinates.lon, targetTime),
+        ]).catch((error) => {
+          console.warn("Context fetch failed during chat reply:", error.message);
+          return [null, null];
         })
-      : Promise.resolve(null);
+      : Promise.resolve([null, null]);
 
-    const [transcriptionResult, weather] = await Promise.all([
-      transcribeAudio(filePath),
-      weatherPromise,
+    const [transcriptionResult, [weather, traffic]] = await Promise.all([
+      transcribeAudio(filePath, language),
+      contextPromise,
     ]);
 
     const transcriptionOriginal = transcriptionResult?.originalText || "";
@@ -309,8 +346,9 @@ const reply = asyncHandler(async (req, res) => {
       language,
       context: { 
         ...(weather ? { weather } : {}),
+        ...(traffic ? { traffic } : {}),
         platforms,
-        vehicles
+        skills
       },
       userId: req.user.userId,
     });
@@ -335,7 +373,7 @@ const replyText = asyncHandler(async (req, res) => {
   const text = ensureNonEmptyString(req.body.text, "text");
   const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
   const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
-  const vehicles = Array.isArray(req.body.vehicles) ? req.body.vehicles : [];
+  const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
 
   const conversation = await findConversationForUser(conversationId, req.user.userId);
 
@@ -344,7 +382,7 @@ const replyText = asyncHandler(async (req, res) => {
     originalText: text,
     translatedText: text, // No translation step in text-only fallback currently
     language,
-    context: { platforms, vehicles },
+    context: { platforms, skills },
     userId: req.user.userId,
   });
 

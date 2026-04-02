@@ -15,15 +15,11 @@ const mongoose = require("mongoose");
 const messageSchema = new mongoose.Schema({
   role:      { type: String, enum: ["user", "assistant"], required: true },
   text:      { type: String, required: true },
-  /**
-   * AI-Generated Sentiment Analysis
-   * Captured in-realtime during the conversation turn.
-   */
   sentiment: {
-    mood:       String,   // e.g., "happy", "stressed", "tired"
-    score:      Number,   // Normalized score from -1.0 to 1.0
-    summary:    String,   // NLP summary of the user's emotional state
-    suggestion: String,   // AI-provided tip based on current mood
+    mood:       String,
+    score:      Number,
+    summary:    String,
+    suggestion: String,
   },
 }, { timestamps: true });
 
@@ -49,7 +45,7 @@ const conversationSchema = new mongoose.Schema({
    */
   step: {
     type: String,
-    enum: ["greeting", "mood", "platform", "earnings", "hours", "summary", "done"],
+    enum: ["greeting", "mood", "job", "earnings", "hours", "summary", "done"],
     default: "greeting",
   },
   /**
@@ -57,7 +53,7 @@ const conversationSchema = new mongoose.Schema({
    * Accumulates structured values (e.g., amount, hours) as they are identified by the LLM.
    */
   extractedData: {
-    platform: String,     // e.g., "uber", "swiggy"
+    job: String,     // e.g., "uber", "swiggy"
     earnings: Number,     // e.g., 1200
     hours:    Number,     // e.g., 5
   },

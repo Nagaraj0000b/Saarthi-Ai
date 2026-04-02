@@ -5,7 +5,8 @@
 const router = require("express").Router();
 const passport = require("passport");
 const jwt = require("jsonwebtoken");
-const { register, login } = require("../controllers/authController");
+const { register, login, updateProfile } = require("../controllers/authController");
+const auth = require("../middleware/auth");
 const AppError = require("../utils/appError");
 const { requireEnv } = require("../utils/env");
 const { googleOAuthEnabled } = require("../config/passport");
@@ -21,6 +22,7 @@ const ensureGoogleOAuthEnabled = (req, res, next) => {
 
 router.post("/register", register);
 router.post("/login", login);
+router.patch("/profile", auth, updateProfile);
 
 router.get(
   "/google",

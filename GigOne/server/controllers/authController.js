@@ -67,4 +67,36 @@ const login = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { register, login };
+const updateProfile = asyncHandler(async (req, res) => {
+  const { name, skills, registeredJobs } = req.body;
+  const userId = req.user.userId;
+
+  const updateData = {};
+  if (name !== undefined) updateData.name = name;
+  if (skills !== undefined) updateData.skills = skills;
+  if (registeredJobs !== undefined) updateData.registeredJobs = registeredJobs;
+
+  const user = await User.findByIdAndUpdate(
+    userId,
+    { $set: updateData },
+    { new: true, runValidators: true }
+  );
+
+  if (!user) {
+    throw new AppError("User not found", 404, { code: "USER_NOT_FOUND" });
+  }
+
+  res.json({
+    success: true,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      skills: user.skills,
+      registeredJobs: user.registeredJobs,
+    },
+  });
+});
+
+module.exports = { register, login, updateProfile };

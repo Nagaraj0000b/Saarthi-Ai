@@ -1,0 +1,59 @@
+{
+  "feature_columns": [
+    "job",
+    "job_type",
+    "weather",
+    "traffic",
+    "burnout_risk",
+    "hour",
+    "day",
+    "temp",
+    "congestion_percent",
+    "is_compatible",
+    "hours_today",
+    "hours_last_3_days",
+    "consecutive_days",
+    "mood_score",
+    "skill_bike",
+    "skill_car",
+    "skill_heavy",
+    "skill_clean",
+    "skill_trade",
+    "skill_care",
+    "skill_digital",
+    "skill_support"
+  ],
+  "categorical_columns": [
+    "job",
+    "job_type",
+    "weather",
+    "traffic",
+    "burnout_risk"
+  ],
+  "numerical_columns": [
+    "hour",
+    "day",
+    "temp",
+    "congestion_percent",
+    "is_compatible",
+    "hours_today",
+    "hours_last_3_days",
+    "consecutive_days",
+    "mood_score",
+    "skill_bike",
+    "skill_car",
+    "skill_heavy",
+    "skill_clean",
+    "skill_trade",
+    "skill_care",
+    "skill_digital",
+    "skill_support"
+  ],
+  "target": "target_earning",
+  "metrics": {
+    "rmse": 25.9377,
+    "mae": 17.0393,
+    "r2": 0.9345
+  },
+  "best_iteration": 413
+}

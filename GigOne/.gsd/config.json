@@ -1,0 +1,7 @@
+{
+  "model_profile": "pro",
+  "researcher_mode": "deep",
+  "plan_checker": "strict",
+  "verifier_logic": "empirical",
+  "branching_strategy": "main"
+}

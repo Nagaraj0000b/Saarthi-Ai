@@ -16,6 +16,11 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.navigation.compose.*
+import androidx.navigation.NavType
+import androidx.navigation.navArgument
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.lifecycle.viewmodel.compose.viewModel
 import com.gigone.saarthi.ui.screens.*
 import com.gigone.saarthi.ui.theme.AppColors
 import com.gigone.saarthi.ui.theme.SaarthiTheme
@@ -47,7 +52,14 @@ fun AppNavigation() {
     val navController = rememberNavController()
     val startRoute = if (TokenManager.isLoggedIn(context)) "main" else "signin"
 
-    NavHost(navController = navController, startDestination = startRoute) {
+    NavHost(
+        navController = navController,
+        startDestination = startRoute,
+        enterTransition = { fadeIn(animationSpec = tween(300)) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) },
+        exitTransition = { fadeOut(animationSpec = tween(300)) + slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(300)) },
+        popEnterTransition = { fadeIn(animationSpec = tween(300)) + slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300)) },
+        popExitTransition = { fadeOut(animationSpec = tween(300)) + slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(300)) }
+    ) {
 
         composable("signin") {
             SignInScreen(
@@ -83,6 +95,11 @@ fun MainScreen(onLogout: () -> Unit) {
     val backStackEntry by tabNav.currentBackStackEntryAsState()
     val currentRoute = backStackEntry?.destination?.route
 
+    // Hoist ViewModels to MainScreen so they are kept alive during tab navigation
+    val dashboardViewModel: DashboardViewModel = viewModel()
+    val earningsViewModel: EarningsViewModel = viewModel()
+    val workLogsViewModel: WorkLogsViewModel = viewModel()
+
     // Hide bottom bar on deep profile screens
     val showBottomBar = currentRoute in tabs.map { it.route }
 
@@ -101,7 +118,7 @@ fun MainScreen(onLogout: () -> Unit) {
                                 }
                             },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label, fontSize = 11.sp) },
+                            label = { Text(tab.label, fontSize = 14.sp) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = AppColors.Primary,
                                 selectedTextColor = AppColors.Primary,
@@ -118,16 +135,55 @@ fun MainScreen(onLogout: () -> Unit) {
         NavHost(
             navController = tabNav,
             startDestination = tabs[0].route,
-            modifier = Modifier.padding(padding)
+            modifier = Modifier.padding(padding),
+            enterTransition = {
+                if (targetState.destination.route in tabs.map { it.route }) {
+                    androidx.compose.animation.EnterTransition.None
+                } else {
+                    slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(250))
+                }
+            },
+            exitTransition = {
+                if (targetState.destination.route in tabs.map { it.route }) {
+                    androidx.compose.animation.ExitTransition.None
+                } else {
+                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Left, tween(250))
+                }
+            },
+            popEnterTransition = {
+                if (targetState.destination.route in tabs.map { it.route }) {
+                    androidx.compose.animation.EnterTransition.None
+                } else {
+                    slideIntoContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(250))
+                }
+            },
+            popExitTransition = {
+                if (targetState.destination.route in tabs.map { it.route }) {
+                    androidx.compose.animation.ExitTransition.None
+                } else {
+                    slideOutOfContainer(AnimatedContentTransitionScope.SlideDirection.Right, tween(250))
+                }
+            }
         ) {
             composable("chatbot") {
-                DashboardScreen(onProfileClick = { tabNav.navigate("profile") })
+                DashboardScreen(
+                    vm = dashboardViewModel, 
+                    onProfileClick = { tabNav.navigate("profile") },
+                    onJobRecommendationsClick = { tabNav.navigate("recommendations_list") },
+                    onManageJobsClick = { tabNav.navigate("manage_jobs") }
+                )
+            }
+            composable("recommendations_list") {
+                com.gigone.saarthi.ui.screens.RecommendationListScreen(
+                    navController = tabNav,
+                    vm = dashboardViewModel
+                )
             }
             composable("earnings") {
-                EarningsScreen()
+                EarningsScreen(vm = earningsViewModel)
             }
             composable("worklogs") {
-                WorkLogsScreen()
+                WorkLogsScreen(vm = workLogsViewModel)
             }
             
             // --- Profile & Settings Screens ---
@@ -135,7 +191,7 @@ fun MainScreen(onLogout: () -> Unit) {
                 ProfileScreen(navController = tabNav, onLogout = onLogout)
             }
             composable("reports") {
-                ReportsScreen()
+                ReportsScreen(navController = tabNav)
             }
             composable("edit_profile") {
                 EditProfileScreen(navController = tabNav)
@@ -146,14 +202,22 @@ fun MainScreen(onLogout: () -> Unit) {
             composable("manage_languages") {
                 ManageLanguagesScreen(navController = tabNav)
             }
-            composable("manage_platforms") {
-                ManagePlatformsScreen(navController = tabNav)
+            composable("manage_jobs") {
+                ManageJobsScreen(navController = tabNav)
             }
-            composable("manage_vehicles") {
-                ManageVehiclesScreen(navController = tabNav)
+            composable("manage_skills") {
+                ManageSkillsScreen(navController = tabNav)
             }
             composable("manage_target") {
                 ManageTargetScreen(navController = tabNav)
+            }
+            
+            composable(
+                route = "job_detail/{jobName}",
+                arguments = listOf(navArgument("jobName") { type = NavType.StringType })
+            ) { backStackEntry ->
+                val jobName = backStackEntry.arguments?.getString("jobName") ?: ""
+                JobDetailScreen(navController = tabNav, jobName = jobName)
             }
         }
     }

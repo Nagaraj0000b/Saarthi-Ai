@@ -41,8 +41,9 @@ object ApiClient {
         val client = OkHttpClient.Builder()
             .addInterceptor(AuthInterceptor(context.applicationContext))
             .addInterceptor(logging)
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)  // audio uploads need more time
+            .connectTimeout(60, TimeUnit.SECONDS)
+            .readTimeout(60, TimeUnit.SECONDS)
+            .writeTimeout(60, TimeUnit.SECONDS)
             .build()
 
         return Retrofit.Builder()

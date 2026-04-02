@@ -54,17 +54,23 @@ object TokenManager {
     fun getSelectedLanguages(ctx: Context): Set<String> =
         prefs(ctx).getStringSet("languages", setOf("English", "Hindi")) ?: setOf("English", "Hindi")
 
-    fun savePlatforms(ctx: Context, platforms: Set<String>) =
-        prefs(ctx).edit().putStringSet("platforms", platforms).apply()
+    fun saveJobs(ctx: Context, jobs: Set<String>) =
+        prefs(ctx).edit().putStringSet("jobs", jobs).apply()
 
-    fun getPlatforms(ctx: Context): Set<String> =
-        prefs(ctx).getStringSet("platforms", setOf()) ?: emptySet()
+    fun getJobs(ctx: Context): Set<String> =
+        prefs(ctx).getStringSet("jobs", setOf()) ?: emptySet()
 
     fun saveVehicles(ctx: Context, vehicles: Set<String>) =
         prefs(ctx).edit().putStringSet("vehicles", vehicles).apply()
 
     fun getVehicles(ctx: Context): Set<String> =
         prefs(ctx).getStringSet("vehicles", setOf("Bike")) ?: setOf("Bike")
+
+    fun saveSkills(ctx: Context, skills: Set<String>) =
+        prefs(ctx).edit().putStringSet("skills", skills).apply()
+
+    fun getSkills(ctx: Context): Set<String> =
+        prefs(ctx).getStringSet("skills", setOf("Bike & Scooter Driving")) ?: setOf("Bike & Scooter Driving")
 
     fun saveDailyTarget(ctx: Context, target: String) =
         prefs(ctx).edit().putString("daily_target", target).apply()
