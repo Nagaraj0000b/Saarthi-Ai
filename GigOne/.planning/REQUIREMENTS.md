@@ -21,4 +21,12 @@
 
 ## Traceability
 
-<!-- Roadmap mapping will be added here -->
+| Requirement | Phase | Status |
+|-------------|-------|--------|
+| ML-01 | Phase 2 | Pending |
+| ML-02 | Phase 2 | Pending |
+| ML-03 | Phase 2 | Pending |
+| ML-04 | Phase 3 | Pending |
+| DATA-01 | Phase 1 | Pending |
+| DATA-02 | Phase 1 | Pending |
+| DOCS-01 | Phase 3 | Pending |
