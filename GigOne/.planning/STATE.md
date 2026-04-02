@@ -6,7 +6,7 @@
 
 ## Current Position
 **Phase**: 05-android-integration
-**Plan**: 05-01
+**Plan**: 05-02
 **Status**: Completed
 **Progress**: 100%
 
@@ -17,6 +17,7 @@
 - Switched to persistent backend storage for skills and registered jobs to support the mobile UI.
 - Phase 04 split into two plans: 04-01 (Foundation) and 04-02 (Logic Integration).
 - Integrated Profile synchronization in Android app using `ProfileViewModel` and `PATCH /api/auth/profile`.
+- Displayed jobType as bold text under the job name in Dashboard and Recommendation list for better legibility without adding too much visual noise.
 
 **Completed Tasks**:
 - Milestone v1.0: All ML-related core changes and verification tests complete.
@@ -28,6 +29,7 @@
 - Phase 05-01 Task 1: Update Data Models (UserData) and Auth API (updateProfile endpoint).
 - Phase 05-01 Task 2: Implement Profile ViewModel and Login Sync.
 - Phase 05-01 Task 3: Integrate Sync Logic into Management Screens (ManageJobs, ManageSkills).
+- Phase 05-02 Task 1: Update Dashboard and Recommendation List UI to display jobType.
 
 **Todos**:
 - Verify E2E integration with a real device/emulator.
