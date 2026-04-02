@@ -5,8 +5,8 @@
 **Current Focus**: Executing Milestone v3.0 (Frontend Polish & Production Readiness).
 
 ## Current Position
-**Phase**: 06-error-handling-polish
-**Plan**: 06-01
+**Phase**: 09-ui-perfection
+**Plan**: 09-02
 **Status**: Completed
 **Progress**: 100%
 
@@ -15,17 +15,18 @@
 - UI changes should use user-friendly, generic fallback messages rather than raw stack traces.
 - Error handling logic will be applied at the ViewModel level, updating StateFlow variables that the Composables observe.
 - Scope for this milestone is strictly limited to the `android/` directory.
+- Typography: Minimum 14.sp for instructional/secondary text.
+- Layout: 16.dp spacing between Header and Recommendation card.
 
 **Completed Tasks**:
 - Milestone v1.0 & v2.0 completed (E2E ML & Backend Integration).
 - Android Profile synchronization implemented.
 - Task: 06-01 Error handling and polish across ViewModels and Composables.
+- Task: 09-01 Theme Persistence & GPS Resolution.
 
 **Todos**:
-- Prepare next plan for further polish or transition to Phase 09.
-
-**Blockers**:
-- None.
+- Complete Phase 09 Plan 02 (Layout & Aesthetics).
+- Prepare next phase (Performance Optimization).
 
 ## Session Continuity
 - Milestone v3.0 started. Scope defined in PROJECT.md, REQUIREMENTS.md, and ROADMAP.md.

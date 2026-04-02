@@ -1,6 +1,6 @@
 /**
  * @fileoverview Earnings Tracking Routes.
- * Facilitates the management of platform-specific income entries.
+ * Facilitates the management of job-specific income entries.
  *
  * @module server/routes/earnings
  * @requires express

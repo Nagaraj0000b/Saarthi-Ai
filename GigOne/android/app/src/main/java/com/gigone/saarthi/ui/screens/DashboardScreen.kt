@@ -175,7 +175,7 @@ fun DashboardScreen(
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 16.dp),
+                    .padding(start = 16.dp, end = 16.dp, top = 8.dp, bottom = 0.dp),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
@@ -256,7 +256,7 @@ fun DashboardScreen(
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(horizontal = 16.dp, vertical = 12.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)
                     .clickable { onJobRecommendationsClick() },
                 shape = RoundedCornerShape(16.dp),
                 color = AppColors.BgCard,
@@ -352,7 +352,7 @@ fun DashboardScreen(
                                             Text(
                                                 topJob.jobType!!,
                                                 color = AppColors.TextSecondary,
-                                                fontSize = 12.sp,
+                                                fontSize = 14.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 modifier = Modifier.padding(top = 2.dp)
                                             )
@@ -386,35 +386,10 @@ fun DashboardScreen(
                         }
                     } else if (recommendationError != null) {
                         if (recommendationError == "NO_JOBS_SELECTED") {
-                            Column(
-                                modifier = Modifier.fillMaxWidth().padding(16.dp),
-                                horizontalAlignment = Alignment.CenterHorizontally
-                            ) {
-                                Icon(
-                                    Icons.Default.Person,
-                                    contentDescription = "No Jobs",
-                                    tint = AppColors.Accent,
-                                    modifier = Modifier.size(32.dp).padding(bottom = 8.dp)
-                                )
-                                Text(
-                                    "No Jobs Selected",
-                                    color = AppColors.TextPrimary,
-                                    fontSize = 16.sp,
-                                    fontWeight = FontWeight.Bold
-                                )
-                                Text(
-                                    "Select jobs to get ML recommendations.",
-                                    color = AppColors.TextSecondary,
-                                    fontSize = 14.sp,
-                                    modifier = Modifier.padding(bottom = 12.dp)
-                                )
-                                Button(
-                                    onClick = onManageJobsClick,
-                                    colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary)
-                                ) {
-                                    Text("Set Up Profile", color = Color.White)
-                                }
-                            }
+                            com.gigone.saarthi.ui.components.EmptyDashboardIllustration(
+                                onSetupClick = onManageJobsClick,
+                                modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
+                            )
                         } else {
                             Text(
                                 "Could not load recommendations",
@@ -580,7 +555,7 @@ fun DashboardScreen(
                                         // Wait for release
                                         tryAwaitRelease()
                                         // Release → send audio
-                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
                                         vm.handleMicPressOut()
                                     }
                                 )

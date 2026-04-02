@@ -64,11 +64,25 @@ val zomatoColors = AppColorsClass(
     bgDeep = Color(0xFFF4F4F2),        // Light cream/grey background
     bgCard = Color(0xFFFFFFFF),        // White cards
     textPrimary = Color(0xFF1C1C1C),     // Zomato Dark Grey for text
-    textSecondary = Color(0xFF696969),   // Secondary text grey
+    textSecondary = Color(0xFF525252),   // Secondary text grey (Slate 700 equivalent)
     textMuted = Color(0xFF9C9C9C),       // Muted grey
     borderSubtle = Color(0xFFE8E8E8),    // Light border
     error = Color(0xFFE23744),         // Error also using brand red
     success = Color(0xFF48C479)        // Zomato success green
+)
+
+// High-Contrast Dark Mode Palette
+val darkColors = AppColorsClass(
+    primary = Color(0xFF818CF8),       // Indigo 400
+    accent = Color(0xFF34D399),        // Emerald 400
+    bgDeep = Color(0xFF0F172A),        // Slate 900
+    bgCard = Color(0xFF1E293B),        // Slate 800
+    textPrimary = Color(0xFFF8FAFC),     // Slate 50
+    textSecondary = Color(0xFF94A3B8),   // Slate 400
+    textMuted = Color(0xFF64748B),       // Slate 500
+    borderSubtle = Color(0xFF334155),    // Slate 700
+    error = Color(0xFFFB7185),         // Rose 400
+    success = Color(0xFF34D399)
 )
 
 // Default is now the Zomato theme

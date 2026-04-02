@@ -7,7 +7,7 @@ const asyncHandler = require("../utils/asyncHandler");
 const AppError = require("../utils/appError");
 const {
   ensureNumber,
-  normalizePlatform,
+  normalizeJob,
   parseOptionalDate,
   parseOptionalNumber,
 } = require("../utils/validation");
@@ -16,8 +16,8 @@ const buildEarningPayload = (body, options = {}) => {
   const { partial = false } = options;
   const payload = {};
 
-  if (!partial || body.platform !== undefined) {
-    payload.platform = normalizePlatform(body.platform, { required: !partial });
+  if (!partial || body.job !== undefined) {
+    payload.job = normalizeJob(body.job, { required: !partial });
   }
 
   const amount = partial
@@ -121,7 +121,7 @@ const getWeeklySummary = asyncHandler(async (req, res) => {
 
   const weeklyShifts = entries.map((entry) => ({
     _id: entry._id,
-    platform: entry.platform,
+    job: entry.job,
     amount: entry.amount,
     hours: entry.hours,
     date: entry.date,

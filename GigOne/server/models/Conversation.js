@@ -45,7 +45,7 @@ const conversationSchema = new mongoose.Schema({
    */
   step: {
     type: String,
-    enum: ["greeting", "mood", "platform", "earnings", "hours", "summary", "done"],
+    enum: ["greeting", "mood", "job", "earnings", "hours", "summary", "done"],
     default: "greeting",
   },
   /**
@@ -53,7 +53,7 @@ const conversationSchema = new mongoose.Schema({
    * Accumulates structured values (e.g., amount, hours) as they are identified by the LLM.
    */
   extractedData: {
-    platform: String,     // e.g., "uber", "swiggy"
+    job: String,     // e.g., "uber", "swiggy"
     earnings: Number,     // e.g., 1200
     hours:    Number,     // e.g., 5
   },

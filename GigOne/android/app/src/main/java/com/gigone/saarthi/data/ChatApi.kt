@@ -24,7 +24,7 @@ interface ChatApi {
     /**
      * Submits a recorded audio file for transcription + AI reply.
      * Mirrors: POST /api/chat/reply  (multipart/form-data)
-     * Fields: audio (file), conversationId, language, platforms, vehicles
+     * Fields: audio (file), conversationId, language, platforms, skills
      */
     @Multipart
     @POST("chat/reply")
@@ -33,7 +33,7 @@ interface ChatApi {
         @Part("conversationId") conversationId: RequestBody,
         @Part("language") language: RequestBody? = null,
         @Part("platforms") platforms: RequestBody? = null,
-        @Part("vehicles") vehicles: RequestBody? = null,
+        @Part("skills") skills: RequestBody? = null,
         @Part("lat") lat: RequestBody? = null,
         @Part("lon") lon: RequestBody? = null
     ): AudioReplyResponse
@@ -52,12 +52,14 @@ interface ChatApi {
     suspend fun deleteSession(@Path("id") id: String)
 
     /**
-     * Fetches platform recommendations for the next shift.
-     * GET /api/recommendations/next-shift?lat={lat}&lon={lon}
+     * Fetches job recommendations for the next shift.
+     * GET /api/jobs/next-shift?lat={lat}&lon={lon}
      */
-    @GET("recommendations/next-shift")
-    suspend fun getRecommendations(
+    @GET("jobs/next-shift")
+    suspend fun getJobRecommendations(
         @Query("lat") lat: Double,
-        @Query("lon") lon: Double
+        @Query("lon") lon: Double,
+        @Query("jobs") jobs: String? = null,
+        @Query("skills") skills: String? = null
     ): RecommendationResponse
 }

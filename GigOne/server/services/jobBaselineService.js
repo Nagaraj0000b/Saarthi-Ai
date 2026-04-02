@@ -9,7 +9,7 @@ const EarningsEntry = require("../models/EarningsEntry");
  * @param {string} userId
  * @returns {Promise<Object>} Map of platform to average hourly rate
  */
-const getPlatformBaselines = async (userId) => {
+const getJobBaselines = async (userId) => {
   // Get all earnings for this user
   const entries = await EarningsEntry.find({ userId }).sort({ date: -1 }).limit(50);
 
@@ -17,11 +17,22 @@ const getPlatformBaselines = async (userId) => {
 
   // Default seed values based on standard market rates (Rupees/hr)
   const defaults = {
-    Uber: 200,
-    Ola: 190,
+    Uber: 220,
+    Ola: 210,
     Swiggy: 160,
     Zomato: 165,
+    Blinkit: 170,
+    Zepto: 175,
     Rapido: 130,
+    "Amazon Flex": 180,
+    BigBasket: 155,
+    Delhivery: 145,
+    BluSmart: 240,
+    Dunzo: 150,
+    "Namma Yatri": 195,
+    BlueDart: 160,
+    JioMart: 150,
+    InDriver: 200,
     Other: 100
   };
 
@@ -29,20 +40,24 @@ const getPlatformBaselines = async (userId) => {
     return defaults;
   }
 
-  // Group by platform
+  // Group by job
   entries.forEach(entry => {
-    if (!stats[entry.platform]) {
-      stats[entry.platform] = { totalAmount: 0, totalHours: 0, count: 0 };
+    if (!stats[entry.job]) {
+      stats[entry.job] = { totalAmount: 0, totalHours: 0, count: 0 };
     }
-    stats[entry.platform].totalAmount += entry.amount;
-    stats[entry.platform].totalHours += entry.hours;
-    stats[entry.platform].count += 1;
+    stats[entry.job].totalAmount += entry.amount;
+    stats[entry.job].totalHours += entry.hours;
+    stats[entry.job].count += 1;
   });
 
   const baselines = {};
-  const platforms = ["Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Other"];
+  const jobs = [
+    "Uber", "Ola", "Swiggy", "Zomato", "Blinkit", "Zepto", "Rapido", 
+    "Amazon Flex", "BigBasket", "Delhivery", "BluSmart", "Dunzo", 
+    "Namma Yatri", "BlueDart", "JioMart", "InDriver", "Other"
+  ];
 
-  platforms.forEach(p => {
+  jobs.forEach(p => {
     if (stats[p] && stats[p].totalHours > 0) {
       // Calculate user average
       const userAvg = stats[p].totalAmount / stats[p].totalHours;
@@ -59,4 +74,4 @@ const getPlatformBaselines = async (userId) => {
   return baselines;
 };
 
-module.exports = { getPlatformBaselines };
+module.exports = { getJobBaselines };

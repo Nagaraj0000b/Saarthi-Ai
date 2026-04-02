@@ -26,6 +26,8 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String }, // Optional to support OAuth-only accounts
   googleId:     { type: String }, // NEW: Correlation ID for Google OAuth users
   role:         { type: String, enum: ["user", "admin"], default: "user" },
+  skills:       { type: [String], default: [] },
+  registeredJobs: { type: [String], default: [] },
 }, { 
   timestamps: true,
   toJSON: {

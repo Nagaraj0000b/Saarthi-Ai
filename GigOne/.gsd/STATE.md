@@ -1,3 +1,10 @@
+## GSD Configuration
+- **Model Profile**: Pro (Advanced)
+- **Researcher Mode**: Deep (Full-scan)
+- **Plan Checker**: Strict (Conservative)
+- **Verifier Logic**: Empirical (Verified)
+- **Branching Strategy**: Main/Current (Direct)
+
 ## Current Position
 - **Milestone**: ML Recommendation Engine (V1)
 - **Phase**: 12 (TBD)

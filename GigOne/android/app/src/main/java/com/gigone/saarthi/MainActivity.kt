@@ -118,7 +118,7 @@ fun MainScreen(onLogout: () -> Unit) {
                                 }
                             },
                             icon = { Icon(tab.icon, contentDescription = tab.label) },
-                            label = { Text(tab.label, fontSize = 11.sp) },
+                            label = { Text(tab.label, fontSize = 14.sp) },
                             colors = NavigationBarItemDefaults.colors(
                                 selectedIconColor = AppColors.Primary,
                                 selectedTextColor = AppColors.Primary,
@@ -168,7 +168,15 @@ fun MainScreen(onLogout: () -> Unit) {
             composable("chatbot") {
                 DashboardScreen(
                     vm = dashboardViewModel, 
-                    onProfileClick = { tabNav.navigate("profile") }
+                    onProfileClick = { tabNav.navigate("profile") },
+                    onJobRecommendationsClick = { tabNav.navigate("recommendations_list") },
+                    onManageJobsClick = { tabNav.navigate("manage_jobs") }
+                )
+            }
+            composable("recommendations_list") {
+                com.gigone.saarthi.ui.screens.RecommendationListScreen(
+                    navController = tabNav,
+                    vm = dashboardViewModel
                 )
             }
             composable("earnings") {
@@ -194,22 +202,22 @@ fun MainScreen(onLogout: () -> Unit) {
             composable("manage_languages") {
                 ManageLanguagesScreen(navController = tabNav)
             }
-            composable("manage_platforms") {
-                ManagePlatformsScreen(navController = tabNav)
+            composable("manage_jobs") {
+                ManageJobsScreen(navController = tabNav)
             }
-            composable("manage_vehicles") {
-                ManageVehiclesScreen(navController = tabNav)
+            composable("manage_skills") {
+                ManageSkillsScreen(navController = tabNav)
             }
             composable("manage_target") {
                 ManageTargetScreen(navController = tabNav)
             }
             
             composable(
-                route = "platform_detail/{platformName}",
-                arguments = listOf(navArgument("platformName") { type = NavType.StringType })
+                route = "job_detail/{jobName}",
+                arguments = listOf(navArgument("jobName") { type = NavType.StringType })
             ) { backStackEntry ->
-                val platformName = backStackEntry.arguments?.getString("platformName") ?: ""
-                PlatformDetailScreen(navController = tabNav, platformName = platformName)
+                val jobName = backStackEntry.arguments?.getString("jobName") ?: ""
+                JobDetailScreen(navController = tabNav, jobName = jobName)
             }
         }
     }

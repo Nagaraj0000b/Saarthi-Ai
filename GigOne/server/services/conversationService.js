@@ -99,14 +99,14 @@ const STEP_CONFIG = {
     extract: null,
   },
   mood: {
-    goal: "Acknowledge the user's mood gently. Ask which platform they worked on today.",
-    nextStep: "platform",
+    goal: "Acknowledge the user's mood gently. Ask which job they worked on today.",
+    nextStep: "job",
     extract: null,
   },
-  platform: {
-    goal: "Acknowledge the platform they worked on nicely. Ask for today's total earnings.",
+  job: {
+    goal: "Acknowledge the job they worked on nicely. Ask for today's total earnings.",
     nextStep: "earnings",
-    extract: "platform",
+    extract: "job",
   },
   earnings: {
     goal: "Acknowledge the earnings amount nicely. Ask for the total hours worked today.",
@@ -234,8 +234,8 @@ Rules:
     contextBlock += `\nWorker's platforms: ${context.platforms.join(", ")}.`;
   }
   
-  if (context?.vehicles && context.vehicles.length > 0) {
-    contextBlock += `\nWorker's vehicles: ${context.vehicles.join(", ")}.`;
+  if (context?.skills && context.skills.length > 0) {
+    contextBlock += `\nWorker's skill sets: ${context.skills.join(", ")}.`;
   }
 
   const prompt = `
@@ -291,7 +291,7 @@ Return ONLY a JSON object:
   try {
     const parsed = JSON.parse(raw);
 
-    if (currentStep === "platform" && parsed.extractedValue) {
+    if (currentStep === "job" && parsed.extractedValue) {
       const normalized =
         String(parsed.extractedValue).charAt(0).toUpperCase() +
         String(parsed.extractedValue).slice(1).toLowerCase();
@@ -304,8 +304,8 @@ Return ONLY a JSON object:
         const platformList = validPlatforms.join(", ");
         const isEnglish = !normalizedLang || normalizedLang === "English";
         parsed.reply = isEnglish
-          ? `I didn't quite catch which platform you worked on. Could you say it again? (Maybe one of these: ${platformList}?)`
-          : `Main theek se samajh nahi paaya ki aapne aaj kis platform par kaam kiya. Kya aap dobara bata sakte hain? (${platformList}?)`;
+          ? `I didn't quite catch which job you worked on. Could you say it again? (Maybe one of these: ${platformList}?)`
+          : `Main theek se samajh nahi paaya ki aapne aaj kis job par kaam kiya. Kya aap dobara bata sakte hain? (${platformList}?)`;
       } else {
         parsed.extractedValue = normalized;
       }

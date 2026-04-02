@@ -1,8 +1,8 @@
 # Milestone v3.0 Requirements: Frontend Polish & Production Readiness
 
 ## Phase 6: Error Handling & Architecture Polish
-- [ ] **POL-01**: Implement graceful error handling (try/catch blocks) across all API calls in ViewModels.
-- [ ] **POL-02**: Ensure the UI displays user-friendly fallback messages (Snackbars, empty states) instead of crashing or showing raw exceptions when network calls fail.
+- [x] **POL-01**: Implement graceful error handling (try/catch blocks) across all API calls in ViewModels.
+- [x] **POL-02**: Ensure the UI displays user-friendly fallback messages (Snackbars, empty states) instead of crashing or showing raw exceptions when network calls fail.
 
 ## Phase 7: Performance & Recomposition Optimization
 - [ ] **POL-03**: Audit Jetpack Compose screens and optimize state management (use `remember`, `derivedStateOf`, and `collectAsStateWithLifecycle()`).
@@ -20,8 +20,8 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| POL-01 | Phase 6 | Pending |
-| POL-02 | Phase 6 | Pending |
+| POL-01 | Phase 6 | Complete |
+| POL-02 | Phase 6 | Complete |
 | POL-03 | Phase 7 | Pending |
 | POL-04 | Phase 7 | Pending |
 | POL-05 | Phase 8 | Pending |
