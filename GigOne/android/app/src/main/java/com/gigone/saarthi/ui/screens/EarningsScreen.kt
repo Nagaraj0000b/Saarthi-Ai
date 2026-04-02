@@ -19,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -38,9 +39,10 @@ import com.gigone.saarthi.util.getJobVisual
 // ═══════════════════════ MAIN SCREEN ═══════════════════════
 @Composable
 fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
+    val ctx = LocalContext.current
     val entries by vm.entries.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val error by vm.error.collectAsStateWithLifecycle()
+    val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
     var showDialog by remember { mutableStateOf(false) }
     var editingEntry by remember { mutableStateOf<EarningEntry?>(null) }
@@ -49,6 +51,14 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
     val totalHours by remember(entries) { derivedStateOf { entries.sumOf { it.hours.toDouble() }.toFloat() } }
     val avgPerHour by remember(totalEarned, totalHours) {
         derivedStateOf { if (totalHours > 0) (totalEarned / totalHours).toInt() else 0 }
+    }
+
+    // ── Error Handling ───────────────────────────────────────────
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(ctx, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
     }
 
     Column(
@@ -126,13 +136,13 @@ fun EarningsScreen(vm: EarningsViewModel = viewModel()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator(color = AppColors.Primary, strokeWidth = 2.5.dp)
             }
-        } else if (error != null && entries.isEmpty()) {
+        } else if (errorMessage != null && entries.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(Icons.Outlined.ErrorOutline, contentDescription = null, tint = AppColors.Error, modifier = Modifier.size(40.dp))
                     Spacer(Modifier.height(12.dp))
                     Text("Failed to load earnings", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold)
-                    Text(error ?: "", color = AppColors.TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
+                    Text(errorMessage ?: "", color = AppColors.TextMuted, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.padding(16.dp))
                 }
             }
         } else if (entries.isEmpty() && !isLoading) {
@@ -429,13 +439,6 @@ fun formatDate(isoString: String): String {
     try {
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
         val formatter = SimpleDateFormat("dd MMM, yyyy", Locale.getDefault())
-        val date = parser.parse(isoString) ?: return isoString
-        return formatter.format(date)
-    } catch (e: Exception) {
-        return isoString.take(10)
-    }
-}
-yyy", Locale.getDefault())
         val date = parser.parse(isoString) ?: return isoString
         return formatter.format(date)
     } catch (e: Exception) {

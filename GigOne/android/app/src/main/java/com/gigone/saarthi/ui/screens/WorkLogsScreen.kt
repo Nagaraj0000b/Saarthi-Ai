@@ -1,5 +1,6 @@
 package com.gigone.saarthi.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -18,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
@@ -35,9 +37,10 @@ import com.gigone.saarthi.util.getRelativeDateLabel
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
+    val ctx = LocalContext.current
     val logs by vm.logs.collectAsStateWithLifecycle()
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val error by vm.error.collectAsStateWithLifecycle()
+    val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
     var selectedLog by remember { mutableStateOf<ChatHistoryLog?>(null) }
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -46,6 +49,14 @@ fun WorkLogsScreen(vm: WorkLogsViewModel = viewModel()) {
     // Grouping logic for "Simple" view
     val groupedLogs = remember(logs) {
         logs.groupBy { getRelativeDateLabel(it.createdAt) }
+    }
+
+    // ── Error Handling ───────────────────────────────────────────
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(ctx, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
     }
 
     Column(
@@ -331,13 +342,6 @@ private fun SimpleChatBubble(message: ChatMessageData) {
         }
         Text(
             if (isAssistant) "Assistant" else "You",
-            fontSize = 10.sp,
-            color = AppColors.TextMuted,
-            modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)
-        )
-    }
-}
-     if (isAssistant) "Assistant" else "You",
             fontSize = 10.sp,
             color = AppColors.TextMuted,
             modifier = Modifier.padding(top = 2.dp, start = 4.dp, end = 4.dp)

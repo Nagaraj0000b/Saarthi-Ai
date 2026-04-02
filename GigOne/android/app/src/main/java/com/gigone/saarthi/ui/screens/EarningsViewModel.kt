@@ -24,8 +24,12 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
 
     init {
         loadEarnings()
@@ -41,12 +45,16 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
     fun loadEarnings() {
         viewModelScope.launch {
             _isLoading.value = true
-            _error.value = null
+            _errorMessage.value = null
             try {
                 _entries.value = earningsApi.getEarnings().sortedByDescending { it.date }
+            } catch (e: HttpException) {
+                _errorMessage.value = "Server error, please try again later."
+            } catch (e: IOException) {
+                _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
-                _error.value = e.message ?: "Unknown error occurred"
-                e.printStackTrace()
+                _errorMessage.value = "An unexpected error occurred."
+                android.util.Log.e("EarningsViewModel", "Load failed", e)
             } finally {
                 _isLoading.value = false
             }
@@ -55,18 +63,25 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
 
     fun addEarning(request: EarningRequest, onSuccess: () -> Unit) {
         viewModelScope.launch {
+            _errorMessage.value = null
             try {
                 val newEntry = earningsApi.addEarning(request)
                 _entries.value = listOf(newEntry) + _entries.value
                 onSuccess()
+            } catch (e: HttpException) {
+                _errorMessage.value = "Server error, please try again later."
+            } catch (e: IOException) {
+                _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
-                e.printStackTrace()
+                _errorMessage.value = "An unexpected error occurred."
+                android.util.Log.e("EarningsViewModel", "Add failed", e)
             }
         }
     }
 
     fun updateEarning(id: String, request: EarningRequest, onSuccess: () -> Unit) {
         viewModelScope.launch {
+            _errorMessage.value = null
             try {
                 val updated = earningsApi.updateEarning(id, request)
                 _entries.value = _entries.value.map { if (it._id == id) updated else it }
@@ -77,23 +92,25 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
                 _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
                 _errorMessage.value = "An unexpected error occurred."
-                e.printStackTrace()
+                android.util.Log.e("EarningsViewModel", "Update failed", e)
             }
         }
     }
 
     fun deleteEarning(id: String) {
         viewModelScope.launch {
+            _errorMessage.value = null
             try {
                 earningsApi.deleteEarning(id)
                 _entries.value = _entries.value.filter { it._id != id }
+            } catch (e: HttpException) {
+                _errorMessage.value = "Server error, please try again later."
+            } catch (e: IOException) {
+                _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
-                e.printStackTrace()
+                _errorMessage.value = "An unexpected error occurred."
+                android.util.Log.e("EarningsViewModel", "Delete failed", e)
             }
-        }
-    }
-}
-        }
         }
     }
 }

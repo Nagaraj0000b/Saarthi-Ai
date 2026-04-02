@@ -159,14 +159,11 @@ fun SignUpScreen(
                                 TokenManager.saveUserName(context, response.user.name.split(" ").first())
                                 onSignUpSuccess()
                             } catch (e: retrofit2.HttpException) {
-                                val errorBody = e.response()?.errorBody()?.string()
-                                errorMessage = try {
-                                    org.json.JSONObject(errorBody ?: "").getString("message")
-                                } catch (_: Exception) {
-                                    "Server error: ${e.code()}"
-                                }
+                                errorMessage = "Registration failed. This email might already be in use."
+                            } catch (e: java.io.IOException) {
+                                errorMessage = "Network error, please check your connection."
                             } catch (e: Exception) {
-                                errorMessage = "Network error: ${e.message?.take(50)}"
+                                errorMessage = "An unexpected error occurred."
                             } finally {
                                 isLoading = false
                             }

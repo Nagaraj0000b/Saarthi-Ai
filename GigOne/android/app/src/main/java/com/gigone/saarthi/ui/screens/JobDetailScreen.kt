@@ -22,12 +22,14 @@ import androidx.navigation.NavController
 import com.gigone.saarthi.ui.theme.AppColors
 import java.text.SimpleDateFormat
 import java.util.*
+import com.gigone.saarthi.util.getJobVisual
+
 
 @Composable
-fun PlatformDetailScreen(navController: NavController, platformName: String, vm: EarningsViewModel = viewModel()) {
+fun JobDetailScreen(navController: NavController, jobName: String, vm: EarningsViewModel = viewModel()) {
     val entries by vm.entries.collectAsStateWithLifecycle()
     
-    val filteredEntries = entries.filter { it.platform.equals(platformName, ignoreCase = true) }
+    val filteredEntries = entries.filter { it.actualJob.equals(jobName, ignoreCase = true) }
         .sortedByDescending { it.date }
 
     Column(
@@ -53,7 +55,7 @@ fun PlatformDetailScreen(navController: NavController, platformName: String, vm:
             Spacer(Modifier.width(12.dp))
             Column {
                 Text(
-                    "$platformName Details",
+                    "$jobName Details",
                     fontSize = 20.sp,
                     fontWeight = FontWeight.ExtraBold,
                     color = AppColors.TextPrimary
@@ -68,7 +70,7 @@ fun PlatformDetailScreen(navController: NavController, platformName: String, vm:
 
         if (filteredEntries.isEmpty()) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No data found for $platformName", color = AppColors.TextSecondary)
+                Text("No data found for $jobName", color = AppColors.TextSecondary)
             }
         } else {
             LazyColumn(
@@ -76,7 +78,7 @@ fun PlatformDetailScreen(navController: NavController, platformName: String, vm:
                 contentPadding = PaddingValues(bottom = 24.dp)
             ) {
                 items(filteredEntries) { entry ->
-                    PlatformEntryCard(entry)
+                    JobEntryCard(entry)
                 }
             }
         }
@@ -84,8 +86,8 @@ fun PlatformDetailScreen(navController: NavController, platformName: String, vm:
 }
 
 @Composable
-fun PlatformEntryCard(entry: com.gigone.saarthi.data.EarningEntry) {
-    val visual = getPlatformVisual(entry.platform)
+fun JobEntryCard(entry: com.gigone.saarthi.data.EarningEntry) {
+    val visual = getJobVisual(entry.actualJob)
     val formattedDate = try {
         val inputFormat = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
         inputFormat.timeZone = TimeZone.getTimeZone("UTC")

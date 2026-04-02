@@ -12,13 +12,14 @@ import com.gigone.saarthi.data.ApiClient
 import com.gigone.saarthi.data.AudioReplyResponse
 import com.gigone.saarthi.data.ChatApi
 import com.gigone.saarthi.data.RecommendationData
+import com.gigone.saarthi.data.ChatMessage
 import com.gigone.saarthi.util.TtsPlayer
 import com.gigone.saarthi.util.TokenManager
 import com.gigone.saarthi.util.VoiceRecorder
-import com.google.android.gms.location.FusedLocationProviderClient
-import com.google.android.gms.location.LocationServices
-import com.google.android.gms.location.Priority
+import com.google.android.gms.location.*
+import com.google.android.gms.common.api.ResolvableApiException
 import com.google.android.gms.tasks.CancellationTokenSource
+import androidx.activity.result.IntentSenderRequest
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -32,16 +33,6 @@ import okhttp3.RequestBody.Companion.toRequestBody
 
 /**
  * DashboardViewModel — single source of truth for the Chatbot screen.
- *
- * Mirrors the entire useState + handler pattern from web client's DashBoard.jsx:
- *   messages       ↔  messages state
- *   isProcessing   ↔  isProcessing state
- *   isRecording    ↔  isRecording state
- *   selectedLanguage ↔ selectedLanguage state
- *   conversationId ↔  conversationId ref
- *   initChat()     ↔  startSession()
- *   handleMicDown  ↔  handleMicPressIn()
- *   handleMicUp    ↔  handleMicPressOut()
  */
 class DashboardViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -81,6 +72,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _currentLocationName = MutableStateFlow("Locating...")
     val currentLocationName: StateFlow<String> = _currentLocationName.asStateFlow()
 
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
+
     private val _selectedLanguage = MutableStateFlow(
         ctx.getSharedPreferences("saarthi_prefs", 0).getString("language", "English") ?: "English"
     )
@@ -97,25 +95,63 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         ctx.getSharedPreferences("saarthi_prefs", 0).edit().putString("language", lang).apply()
     }
 
-    /** Fetch platform recommendations based on current location. */
-    fun loadRecommendations() {
+    /**
+     * Checks if system-level GPS is enabled. 
+     * If not, it provides a ResolvableApiException via onResolutionRequired.
+     */
+    fun checkLocationSettings(
+        onResolutionRequired: (IntentSenderRequest) -> Unit,
+        onAlreadyEnabled: () -> Unit
+    ) {
+        val locationRequest = LocationRequest.Builder(Priority.PRIORITY_HIGH_ACCURACY, 10000).build()
+        val builder = LocationSettingsRequest.Builder().addLocationRequest(locationRequest)
+        val client: SettingsClient = LocationServices.getSettingsClient(ctx)
+        val task = client.checkLocationSettings(builder.build())
+
+        task.addOnSuccessListener { onAlreadyEnabled() }
+        task.addOnFailureListener { exception ->
+            if (exception is ResolvableApiException) {
+                try {
+                    val intentSenderRequest = IntentSenderRequest.Builder(exception.resolution.intentSender).build()
+                    onResolutionRequired(intentSenderRequest)
+                } catch (sendEx: Exception) {
+                    // Ignore the error
+                }
+            }
+        }
+    }
+
+    /** Fetch job recommendations based on current location. */
+    fun loadRecommendations(onLocationDisabled: ((IntentSenderRequest) -> Unit)? = null) {
         viewModelScope.launch {
             _isRecommendationLoading.value = true
             _recommendationError.value = null
             try {
-                val loc = getCurrentLocation()
-                if (loc == null) {
-                    _recommendationError.value = if (!hasLocationPermission()) {
-                        "Enable location to get platform recommendations."
-                    } else {
-                        "Could not fetch your current location."
-                    }
+                if (TokenManager.getJobs(ctx).isEmpty()) {
+                    _recommendationError.value = "NO_JOBS_SELECTED"
+                    return@launch
+                }
+                
+                var loc = getCurrentLocation()
+                if (loc == null && onLocationDisabled != null) {
+                    // Try to resolve location settings if we can't get a location
+                    checkLocationSettings(
+                        onResolutionRequired = { intentSenderRequest ->
+                            _isRecommendationLoading.value = false
+                            onLocationDisabled(intentSenderRequest)
+                        },
+                        onAlreadyEnabled = {
+                            // If it's already enabled but loc was null, maybe it just needs a retry
+                            viewModelScope.launch {
+                                val retryLoc = getCurrentLocation()
+                                proceedWithRecommendations(retryLoc)
+                            }
+                        }
+                    )
                     return@launch
                 }
 
-                val api = ApiClient.buildRetrofit(ctx).create(com.gigone.saarthi.data.ChatApi::class.java)
-                val response = api.getRecommendations(loc.latitude, loc.longitude)
-                _recommendation.value = response.data
+                proceedWithRecommendations(loc)
             } catch (e: Exception) {
                 android.util.Log.e("DashboardViewModel", "Failed to load recommendations", e)
                 _recommendationError.value = "Couldn't load recommendations. Tap retry."
@@ -125,20 +161,46 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+    private suspend fun proceedWithRecommendations(loc: Location?) {
+        if (loc == null) {
+            _recommendationError.value = if (!hasLocationPermission()) {
+                "Enable location to get job recommendations."
+            } else {
+                "Could not fetch your current location. Ensure GPS is ON."
+            }
+            return
+        }
+
+        try {
+            val jobsStr = TokenManager.getJobs(ctx).joinToString(",")
+            val skillsStr = TokenManager.getSkills(ctx).joinToString(",")
+            val response = chatApi.getJobRecommendations(loc.latitude, loc.longitude, jobsStr, skillsStr)
+            _recommendation.value = response.data
+        } catch (e: HttpException) {
+            _errorMessage.value = "Server error, please try again later."
+        } catch (e: IOException) {
+            _errorMessage.value = "Network error, please check your connection."
+        } catch (e: Exception) {
+            android.util.Log.e("DashboardViewModel", "API call failed", e)
+            _errorMessage.value = "An unexpected error occurred."
+        }
+    }
+
     // ─── Session Init (mirrors initChat()) ──────────────────────────────────
     private fun startSession() {
         viewModelScope.launch {
             try {
                 _isProcessing.value = true
+                _errorMessage.value = null
                 
                 val location = getCurrentLocation()
-                val platforms = TokenManager.getPlatforms(ctx).toList()
-                val vehicles = TokenManager.getVehicles(ctx).toList()
+                val jobs = TokenManager.getJobs(ctx).toList()
+                val skills = TokenManager.getSkills(ctx).toList()
                 
                 val body = com.gigone.saarthi.data.StartSessionRequest(
                     language = _selectedLanguage.value,
-                    platforms = platforms,
-                    vehicles = vehicles,
+                    platforms = jobs,
+                    skills = skills,
                     lat = location?.latitude,
                     lon = location?.longitude
                 )
@@ -149,11 +211,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 
                 val token = TokenManager.getToken(ctx) ?: ""
                 ttsPlayer.speak(data.reply, _selectedLanguage.value, token)
+            } catch (e: HttpException) {
+                _errorMessage.value = "Server error, please try again later."
+                _messages.value = listOf(ChatMessage("assistant", "⚠️ Could not connect to server. Try again."))
+            } catch (e: IOException) {
+                _errorMessage.value = "Network error, please check your connection."
+                _messages.value = listOf(ChatMessage("assistant", "⚠️ Network error. Check your internet."))
             } catch (e: Exception) {
                 android.util.Log.e("DashboardViewModel", "Failed to start session", e)
-                _messages.value = _messages.value + ChatMessage(
-                    "assistant", "⚠️ Could not connect to server. Error: ${e.message}"
-                )
+                _errorMessage.value = "An unexpected error occurred."
+                _messages.value = listOf(ChatMessage("assistant", "⚠️ Something went wrong."))
             } finally {
                 _isProcessing.value = false
             }
@@ -209,10 +276,10 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val convIdBody = conversationId!!.toRequestBody("text/plain".toMediaType())
                 val langBody = _selectedLanguage.value.toRequestBody("text/plain".toMediaType())
                 
-                val platforms = TokenManager.getPlatforms(ctx).joinToString(",")
-                val vehicles = TokenManager.getVehicles(ctx).joinToString(",")
-                val platformsBody = platforms.toRequestBody("text/plain".toMediaType())
-                val vehiclesBody = vehicles.toRequestBody("text/plain".toMediaType())
+                val jobs = TokenManager.getJobs(ctx).joinToString(",")
+                val skills = TokenManager.getSkills(ctx).joinToString(",")
+                val jobsBody = jobs.toRequestBody("text/plain".toMediaType())
+                val skillsBody = skills.toRequestBody("text/plain".toMediaType())
 
                 val latBody = location?.latitude?.toString()?.toRequestBody("text/plain".toMediaType())
                 val lonBody = location?.longitude?.toString()?.toRequestBody("text/plain".toMediaType())
@@ -221,8 +288,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     audioPart, 
                     convIdBody, 
                     langBody,
-                    platformsBody,
-                    vehiclesBody,
+                    jobsBody,
+                    skillsBody,
                     latBody,
                     lonBody
                 )
@@ -245,7 +312,22 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 ttsPlayer.speak(data.reply, _selectedLanguage.value, token)
                 audioFile.delete()
 
+            } catch (e: HttpException) {
+                _errorMessage.value = "Server error, please try again later."
+                val current = _messages.value.dropLast(1)
+                _messages.value = current + ChatMessage(
+                    "assistant", "⚠️ Server error."
+                )
+                audioFile.delete()
+            } catch (e: IOException) {
+                _errorMessage.value = "Network error, please check your connection."
+                val current = _messages.value.dropLast(1)
+                _messages.value = current + ChatMessage(
+                    "assistant", "⚠️ Network error."
+                )
+                audioFile.delete()
             } catch (e: Exception) {
+                _errorMessage.value = "An unexpected error occurred."
                 val current = _messages.value.dropLast(1)
                 _messages.value = current + ChatMessage(
                     "assistant", "⚠️ Voice error: ${e.message ?: "Something went wrong."}"

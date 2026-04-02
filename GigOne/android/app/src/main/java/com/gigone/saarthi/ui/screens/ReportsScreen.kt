@@ -25,6 +25,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.gigone.saarthi.ui.theme.AppColors
+import com.gigone.saarthi.util.getJobVisual
+
 import android.graphics.pdf.PdfDocument
 import android.graphics.Paint
 import android.graphics.Color
@@ -49,8 +51,8 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
     val totalTrips = entries.size
     val avgPerHour = if (totalHours > 0) totalEarned / totalHours else 0f
     
-    // Aggregate by Platform -> Pair(Amount, Hours)
-    val platformStats = entries.groupBy { it.platform }
+    // Aggregate by Job -> Pair(Amount, Hours)
+    val jobStats = entries.groupBy { it.actualJob }
         .mapValues { (_, list) -> 
             val amount = list.sumOf { it.amount.toDouble() }.toFloat()
             val hours = list.sumOf { it.hours.toDouble() }.toFloat()
@@ -92,7 +94,7 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
                     )
                     Text(
                         "Detailed Statement",
-                        fontSize = 12.sp,
+                        fontSize = 14.sp,
                         color = AppColors.TextSecondary
                     )
                 }
@@ -101,7 +103,7 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
             // Top-level Download Button replacing the bottom view
             IconButton(
                 onClick = { 
-                    generateAndSavePdf(context, totalEarned, totalHours, platformStats, entries)
+                    generateAndSavePdf(context, totalEarned, totalHours, jobStats, entries)
                 },
                 modifier = Modifier
                     .size(36.dp)
@@ -124,7 +126,7 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
         ) {
             Box(modifier = Modifier.fillMaxWidth().padding(16.dp)) {
                 Column {
-                    Text("Total Revenue", color = AppColors.BgDeep.copy(alpha = 0.8f), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
+                    Text("Total Revenue", color = AppColors.BgDeep.copy(alpha = 0.8f), fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
                     Spacer(Modifier.height(2.dp))
                     Text("₹${totalEarned.toInt()}", color = AppColors.BgCard, fontWeight = FontWeight.ExtraBold, fontSize = 32.sp)
                 }
@@ -155,17 +157,17 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
         }
 
         Text(
-            "Platform Breakdown",
+            "Job Breakdown",
             fontSize = 18.sp,
             fontWeight = FontWeight.Bold,
             color = AppColors.TextPrimary,
             modifier = Modifier.padding(bottom = 16.dp)
         )
 
-        // --- Platform Table ---
-        if (platformStats.isEmpty()) {
+        // --- Job Table ---
+        if (jobStats.isEmpty()) {
             Box(modifier = Modifier.fillMaxWidth().height(100.dp), contentAlignment = Alignment.Center) {
-                Text("No data to display yet.", color = AppColors.TextSecondary)
+                Text("No data to display yet.", color = AppColors.TextSecondary, fontSize = 14.sp)
             }
         } else {
             Card(
@@ -176,17 +178,17 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
                 elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
             ) {
                 Column(modifier = Modifier.padding(12.dp)) {
-                    platformStats.forEachIndexed { index, (platform, stats) ->
+                    jobStats.forEachIndexed { index, (job, stats) ->
                         val amount = stats.first
                         val hours = stats.second
-                        val visual = getPlatformVisual(platform) 
+                        val visual = getJobVisual(job) 
                         val percentage = if (totalEarned > 0) amount / totalEarned else 0f
                         
                         Row(
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .clip(RoundedCornerShape(8.dp))
-                                .clickable { navController.navigate("platform_detail/$platform") }
+                                .clickable { navController.navigate("job_detail/$job") }
                                 .padding(vertical = 8.dp, horizontal = 4.dp),
                             verticalAlignment = Alignment.CenterVertically
                         ) {
@@ -201,18 +203,18 @@ fun ReportsScreen(navController: NavController, vm: EarningsViewModel = viewMode
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
-                                Text(platform, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                Text(job, color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
                                 Spacer(Modifier.height(2.dp))
-                                Text("${hours.toInt()} hrs logged", color = AppColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.Medium)
+                                Text("${hours.toInt()} hrs logged", color = AppColors.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.Medium)
                             }
                             Spacer(Modifier.width(12.dp))
                             Column(horizontalAlignment = Alignment.End) {
                                 Text("₹${amount.toInt()}", color = AppColors.TextPrimary, fontWeight = FontWeight.ExtraBold, fontSize = 15.sp)
                                 Spacer(Modifier.height(2.dp))
-                                Text("${(percentage * 100).toInt()}% of total", color = AppColors.TextMuted, fontSize = 10.sp)
+                                Text("${(percentage * 100).toInt()}% of total", color = AppColors.TextMuted, fontSize = 14.sp)
                             }
                         }
-                        if (index < platformStats.size - 1) {
+                        if (index < jobStats.size - 1) {
                             HorizontalDivider(color = AppColors.BorderSubtle, thickness = 1.dp, modifier = Modifier.padding(vertical = 4.dp))
                         }
                     }
@@ -238,7 +240,7 @@ fun ReportMetricCard(title: String, value: String, icon: androidx.compose.ui.gra
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
             Icon(icon, contentDescription = null, tint = AppColors.Primary, modifier = Modifier.size(22.dp).padding(bottom = 6.dp))
-            Text(title, color = AppColors.TextSecondary, fontSize = 11.sp, fontWeight = FontWeight.SemiBold)
+            Text(title, color = AppColors.TextSecondary, fontSize = 14.sp, fontWeight = FontWeight.SemiBold)
             Spacer(Modifier.height(4.dp))
             Text(value, color = AppColors.TextPrimary, fontSize = 20.sp, fontWeight = FontWeight.Bold)
         }
@@ -249,7 +251,7 @@ fun generateAndSavePdf(
     context: android.content.Context, 
     earned: Float, 
     hours: Float, 
-    platformStats: List<Pair<String, Pair<Float, Float>>>,
+    jobStats: List<Pair<String, Pair<Float, Float>>>,
     entries: List<com.gigone.saarthi.data.EarningEntry>
 ) {
     try {
@@ -284,19 +286,19 @@ fun generateAndSavePdf(
         paint.textSize = 16f
         paint.color = Color.DKGRAY
         paint.isFakeBoldText = true
-        canvas.drawText("Platform Breakdown:", 20f, yPos, paint)
+        canvas.drawText("Job Breakdown:", 20f, yPos, paint)
         yPos += 30f
         
         paint.textSize = 14f
         paint.isFakeBoldText = false
-        if (platformStats.isEmpty()) {
+        if (jobStats.isEmpty()) {
             canvas.drawText("No data available yet.", 30f, yPos, paint)
             yPos += 25f
         } else {
-            for ((platform, stats) in platformStats) {
+            for ((job, stats) in jobStats) {
                 val pAmount = stats.first
                 val pHours = stats.second
-                canvas.drawText("• $platform : ${pHours.toInt()} hrs | Rs. ${pAmount.toInt()}", 30f, yPos, paint)
+                canvas.drawText("• $job : ${pHours.toInt()} hrs | Rs. ${pAmount.toInt()}", 30f, yPos, paint)
                 yPos += 25f
             }
         }
@@ -331,7 +333,7 @@ fun generateAndSavePdf(
             }
 
             val datePart = try { entry.date.split("T")[0] } catch (e: Exception) { entry.date }
-            canvas.drawText("${entry.platform} | $datePart | ${entry.hours.toInt()}h | Rs. ${entry.amount.toInt()}", 30f, yPos, paint)
+            canvas.drawText("${entry.actualJob} | $datePart | ${entry.hours.toInt()}h | Rs. ${entry.amount.toInt()}", 30f, yPos, paint)
             yPos += 20f
         }
         

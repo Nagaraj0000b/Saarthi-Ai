@@ -83,6 +83,15 @@ fun DashboardScreen(
     val recommendation: RecommendationData? by vm.recommendation.collectAsStateWithLifecycle()
     val isRecommendationLoading: Boolean by vm.isRecommendationLoading.collectAsStateWithLifecycle()
     val recommendationError: String? by vm.recommendationError.collectAsStateWithLifecycle()
+    val errorMessage: String? by vm.errorMessage.collectAsStateWithLifecycle()
+
+    // ─── Error Handling ──────────────────────────────────────────────────────
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(ctx, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
+    }
 
     // ─── Runtime permission launchers ─────────────────────────────────────────
     val permissionLauncher = rememberLauncherForActivityResult(

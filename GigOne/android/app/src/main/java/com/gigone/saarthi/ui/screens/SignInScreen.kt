@@ -150,12 +150,7 @@ fun SignInScreen(
                                 
                                 onSignInSuccess()
                             } catch (e: retrofit2.HttpException) {
-                                val errorBody = e.response()?.errorBody()?.string()
-                                errorMessage = try {
-                                    org.json.JSONObject(errorBody ?: "").getString("message")
-                                } catch (_: Exception) {
-                                    "Server error, please try again later."
-                                }
+                                errorMessage = "Invalid email or password. Please try again."
                             } catch (e: java.io.IOException) {
                                 errorMessage = "Network error, please check your connection."
                             } catch (e: Exception) {
