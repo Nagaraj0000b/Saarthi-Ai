@@ -1,6 +1,8 @@
 package com.gigone.saarthi.ui.screens
 
+import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -15,11 +17,15 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.gigone.saarthi.ui.theme.AppColors
 import com.gigone.saarthi.util.TokenManager
@@ -108,6 +114,7 @@ fun AccountSettingsScreen(navController: NavController, onLogout: () -> Unit) {
 fun ManageLanguagesScreen(navController: NavController) {
     val context = LocalContext.current
     var selectedLanguages by remember { mutableStateOf(TokenManager.getSelectedLanguages(context)) }
+    LaunchedEffect(selectedLanguages) { TokenManager.saveSelectedLanguages(context, selectedLanguages) }
     val allLanguages = listOf("English", "Hindi", "Kannada", "Telugu", "Tamil", "Marathi", "Malayalam", "Bengali", "Urdu", "Gujarati", "Punjabi", "Odia", "Assamese", "Bhojpuri")
 
     Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
@@ -140,70 +147,136 @@ fun ManageLanguagesScreen(navController: NavController) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManagePlatformsScreen(navController: NavController) {
+fun ManageJobsScreen(
+    navController: NavController,
+    vm: ProfileViewModel = viewModel()
+) {
     val context = LocalContext.current
-    var selectedPlatforms by remember { mutableStateOf(TokenManager.getPlatforms(context)) }
-    val allPlatforms = listOf("Uber", "Ola", "Swiggy", "Zomato", "Rapido")
+    var selectedJobs by remember { mutableStateOf(TokenManager.getJobs(context)) }
+    val selectedSkills = remember { TokenManager.getSkills(context) }
+    
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    val isSuccess by vm.isSuccess.collectAsStateWithLifecycle()
+    val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
-        TopAppBar(
-            title = { Text("Platforms", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { 
-                    TokenManager.savePlatforms(context, selectedPlatforms)
-                    navController.popBackStack() 
-                }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.BgCard)
-        )
-        Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-            SearchAndAddSection(
-                title = "My Platforms",
-                subtitle = "Search or add platforms you work for.",
-                selectedItems = selectedPlatforms,
-                suggestions = allPlatforms,
-                placeholder = "Search or type platform",
-                chipColor = AppColors.Accent,
-                onAdd = { newPlat -> if (newPlat.isNotBlank()) selectedPlatforms = selectedPlatforms + newPlat },
-                onRemove = { platToRemove -> selectedPlatforms = selectedPlatforms - platToRemove }
+    LaunchedEffect(isSuccess) {
+        if (isSuccess) {
+            Toast.makeText(context, "Jobs updated!", Toast.LENGTH_SHORT).show()
+            vm.clearStatus()
+        }
+    }
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
+    }
+
+    val allJobs = listOf(
+        "Uber", "Ola", "Swiggy", "Zomato", "Blinkit", "Zepto", "Rapido", 
+        "Amazon Flex", "BigBasket", "Delhivery", "BluSmart", "Dunzo", 
+        "Namma Yatri", "BlueDart", "JioMart", "InDriver",
+        "Urban Company", "Local Plumber", "Local Electrician", "Home Cleaning Co",
+        "Elderly Care", "Pet Walker",
+        "DataEntry Inc", "SupportHero", "Virtual Assistant Hub", "Translation Pro",
+        "Other"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
+            TopAppBar(
+                title = { Text("Jobs", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = { 
+                        vm.syncProfile(selectedSkills, selectedJobs)
+                        navController.popBackStack()
+                    }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.BgCard)
             )
+            Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+                SearchAndAddSection(
+                    title = "My Jobs",
+                    subtitle = "Search or add jobs you work for.",
+                    selectedItems = selectedJobs,
+                    suggestions = allJobs,
+                    placeholder = "Search or type job",
+                    chipColor = AppColors.Accent,
+                    onAdd = { newJob -> if (newJob.isNotBlank()) selectedJobs = selectedJobs + newJob },
+                    onRemove = { jobToRemove -> selectedJobs = selectedJobs - jobToRemove }
+                )
+            }
         }
     }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ManageVehiclesScreen(navController: NavController) {
+fun ManageSkillsScreen(
+    navController: NavController,
+    vm: ProfileViewModel = viewModel()
+) {
     val context = LocalContext.current
-    var selectedVehicles by remember { mutableStateOf(TokenManager.getVehicles(context)) }
-    val allVehicles = listOf("Bike", "Scooter", "Electric Bike (EV)", "Auto-Rickshaw", "Cab (Mini/Sedan)", "Cab (SUV)", "Cycle", "Mini Truck", "Walking")
+    var selectedSkills by remember { mutableStateOf(TokenManager.getSkills(context)) }
+    val selectedJobs = remember { TokenManager.getJobs(context) }
+    
+    val isSuccess by vm.isSuccess.collectAsStateWithLifecycle()
+    val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
-    Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
-        TopAppBar(
-            title = { Text("Vehicles", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { 
-                    TokenManager.saveVehicles(context, selectedVehicles)
-                    navController.popBackStack() 
-                }) {
-                    Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.BgCard)
-        )
-        Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-            SearchAndAddSection(
-                title = "My Vehicles",
-                subtitle = "Search or add vehicles you use.",
-                selectedItems = selectedVehicles,
-                suggestions = allVehicles,
-                placeholder = "Search or type vehicle",
-                chipColor = AppColors.Success,
-                onAdd = { newVeh -> if (newVeh.isNotBlank()) selectedVehicles = selectedVehicles + newVeh },
-                onRemove = { vehToRemove -> selectedVehicles = selectedVehicles - vehToRemove }
+    LaunchedEffect(isSuccess) {
+        if (isSuccess) {
+            Toast.makeText(context, "Skills updated!", Toast.LENGTH_SHORT).show()
+            vm.clearStatus()
+        }
+    }
+
+    LaunchedEffect(errorMessage) {
+        errorMessage?.let {
+            Toast.makeText(context, it, Toast.LENGTH_LONG).show()
+            vm.clearError()
+        }
+    }
+
+    val allSkills = listOf(
+        "Bike & Scooter Driving",
+        "Car & Cab Driving",
+        "Heavy Lifting & Moving",
+        "Cleaning & House Chores",
+        "Skilled Trades & Repairs",
+        "Care & Assistance",
+        "Computer & Admin Work",
+        "Customer Support & Calls"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
+            TopAppBar(
+                title = { Text("Skill Sets", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
+                navigationIcon = {
+                    IconButton(onClick = { 
+                        vm.syncProfile(selectedSkills, selectedJobs)
+                        navController.popBackStack()
+                    }) {
+                        Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.BgCard)
             )
+            Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
+                SearchAndAddSection(
+                    title = "My Skills",
+                    subtitle = "Select skills you possess for better job matches.",
+                    selectedItems = selectedSkills,
+                    suggestions = allSkills,
+                    placeholder = "Search or select skill",
+                    chipColor = AppColors.Success,
+                    onAdd = { newSkill -> if (newSkill.isNotBlank()) selectedSkills = selectedSkills + newSkill },
+                    onRemove = { skillToRemove -> selectedSkills = selectedSkills - skillToRemove }
+                )
+            }
         }
     }
 }
@@ -213,6 +286,7 @@ fun ManageVehiclesScreen(navController: NavController) {
 fun ManageTargetScreen(navController: NavController) {
     val context = LocalContext.current
     var dailyTarget by remember { mutableStateOf(TokenManager.getDailyTarget(context)) }
+    LaunchedEffect(dailyTarget) { TokenManager.saveDailyTarget(context, dailyTarget) }
 
     Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
         TopAppBar(
@@ -414,3 +488,4 @@ fun SearchAndAddSection(
         }
     }
 }
+

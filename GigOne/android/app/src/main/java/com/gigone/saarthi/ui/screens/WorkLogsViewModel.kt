@@ -21,8 +21,12 @@ class WorkLogsViewModel(application: Application) : AndroidViewModel(application
     private val _isLoading = MutableStateFlow(true)
     val isLoading: StateFlow<Boolean> = _isLoading.asStateFlow()
 
-    private val _error = MutableStateFlow<String?>(null)
-    val error: StateFlow<String?> = _error.asStateFlow()
+    private val _errorMessage = MutableStateFlow<String?>(null)
+    val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
+
+    fun clearError() {
+        _errorMessage.value = null
+    }
 
     init {
         loadLogs()
@@ -56,6 +60,14 @@ class WorkLogsViewModel(application: Application) : AndroidViewModel(application
                 chatApi.deleteSession(id)
                 _logs.value = _logs.value.filter { it._id != id }
             } catch (e: Exception) {
+                e.printStackTrace()
+            }
+        }
+    }
+}
+ue = "Network error, please check your connection."
+            } catch (e: Exception) {
+                _errorMessage.value = "An unexpected error occurred."
                 e.printStackTrace()
             }
         }

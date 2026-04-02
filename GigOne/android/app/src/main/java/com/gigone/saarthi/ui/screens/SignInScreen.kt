@@ -143,16 +143,23 @@ fun SignInScreen(
                                 TokenManager.saveToken(context, response.token)
                                 TokenManager.saveUserName(context, response.user.name) // Save full name
                                 TokenManager.saveUserEmail(context, email) // Save email used to login
+                                
+                                // Sync skills and jobs from backend
+                                TokenManager.saveSkills(context, response.user.skills.toSet())
+                                TokenManager.saveJobs(context, response.user.registeredJobs.toSet())
+                                
                                 onSignInSuccess()
                             } catch (e: retrofit2.HttpException) {
                                 val errorBody = e.response()?.errorBody()?.string()
                                 errorMessage = try {
                                     org.json.JSONObject(errorBody ?: "").getString("message")
                                 } catch (_: Exception) {
-                                    "Server error: ${e.code()}"
+                                    "Server error, please try again later."
                                 }
+                            } catch (e: java.io.IOException) {
+                                errorMessage = "Network error, please check your connection."
                             } catch (e: Exception) {
-                                errorMessage = "Network error: ${e.message?.take(50)}"
+                                errorMessage = "An unexpected error occurred."
                             } finally {
                                 isLoading = false
                             }

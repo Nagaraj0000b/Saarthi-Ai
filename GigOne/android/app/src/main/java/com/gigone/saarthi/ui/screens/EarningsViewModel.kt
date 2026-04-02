@@ -11,6 +11,8 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
+import java.io.IOException
 
 class EarningsViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -69,7 +71,12 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
                 val updated = earningsApi.updateEarning(id, request)
                 _entries.value = _entries.value.map { if (it._id == id) updated else it }
                 onSuccess()
+            } catch (e: HttpException) {
+                _errorMessage.value = "Server error, please try again later."
+            } catch (e: IOException) {
+                _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
+                _errorMessage.value = "An unexpected error occurred."
                 e.printStackTrace()
             }
         }
@@ -83,6 +90,10 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
             } catch (e: Exception) {
                 e.printStackTrace()
             }
+        }
+    }
+}
+        }
         }
     }
 }
