@@ -199,31 +199,40 @@ def hours_node(state: VoiceChatState) -> Dict[str, Any]:
         # Trigger retry_hours
         return retry_node(state)
 
-    # 3. Get Acknowledgment and Final Summary
+    return {
+        "hours_worked": str(hours),
+        "current_step": "final_summarization"
+    }
+
+def final_summary_node(state: VoiceChatState) -> Dict[str, Any]:
+    """Generates the final summary including weather and traffic context."""
+    headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
+    
     payload_reply = {
         "language": state.get("language", "English"),
-        "state": "final_summary",
+        "state": "complete",
         "platforms": state.get("jobs_list", []),
         "dailyMood": { "moodLabel": state.get("mood", "Neutral") },
         "extractedData": { 
             "platform": state.get("selected_platform"),
             "earnings": state.get("expected_earnings"),
-            "hours": str(hours)
-        }
+            "hours": state.get("hours_worked")
+        },
+        "weather": {"nextShift": {"description": state.get("weather_condition", "clear")}},
+        "traffic": {"traffic_level": state.get("traffic_condition", "light")}
     }
     
     try:
         resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=30)
         resp_reply.raise_for_status()
-        reply = resp_reply.json().get("summary", f"Got it, {hours} hours. Thanks for sharing!")
+        reply = resp_reply.json().get("summary", "Thanks for sharing! Have a great next shift.")
     except Exception as e:
-        print(f"Hours acknowledgment error: {e}")
-        reply = f"Got it, {hours} hours. Thanks for sharing!"
+        print(f"Final summary error: {e}")
+        reply = "Thanks for sharing! Have a great next shift."
 
     return {
-        "hours_worked": str(hours),
         "final_summary": reply,
-        "current_step": "final_summarization"
+        "current_step": "completed"
     }
 
 def retry_node(state: VoiceChatState) -> Dict[str, Any]:
