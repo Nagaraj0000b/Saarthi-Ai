@@ -21,9 +21,9 @@ Technical Terms Defined:
 - Schema: A blueprint or template that defines the structure of data.
 """
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import xgboost as xgb
 import pandas as pd
 import pickle
@@ -49,6 +49,11 @@ app = FastAPI(title="GigOne Saarthi ML Engine", version="1.0.0")
 model = None
 encoders = None
 metadata = None
+
+from voice_chat_v2.graph import create_graph
+
+# Initialize LangGraph app
+graph_app = create_graph()
 
 @app.on_event("startup")
 def load_artifacts():
@@ -294,6 +299,18 @@ def get_recommendations(context: UserContext):
         # Sort the results so the highest earnings are at the top
         recommendation_results.sort(key=lambda x: x.predicted_earning, reverse=True)
         return recommendation_results
+    except Exception as error_message:
+        raise HTTPException(status_code=500, detail=str(error_message))
+
+@app.post("/chat/turn")
+def process_chat_turn(payload: Dict[str, Any] = Body(...)):
+    """
+    Processes a single turn of the LangGraph voice chatbot.
+    Receives the current state and returns the new state.
+    """
+    try:
+        new_state = graph_app.invoke(payload)
+        return new_state
     except Exception as error_message:
         raise HTTPException(status_code=500, detail=str(error_message))
 
