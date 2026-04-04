@@ -6,17 +6,12 @@
 - **Branching Strategy**: Main/Current (Direct)
 
 ## Current Position
-- **Milestone**: ML Recommendation Engine (V1)
-- **Phase**: 12 (TBD)
-- **Task**: Phase 11.2 complete
-- **Status**: Ready for next phase.
+- **Milestone**: Milestone 3: LangGraph Voice Chat Rebuild
+- **Phase**: Not started
+- **Status**: Milestone planned
 
 ## Last Session Summary
-Phase 11.2 (Shift History Simplification) executed successfully. The Shift History screen was redesigned to be "simple and easy" with grouped date headers (Today, Yesterday, etc.) and minimalist, horizontal cards.
+Created Milestone 3: LangGraph Voice Chat Rebuild with completely decoupled conversational phases and a parallel rollout strategy.
 
 ## Next Steps
-1. Discuss the next phase or milestone.
-
-
-
-
+1. Execute `/plan 1` — Create Phase 1 execution plans.

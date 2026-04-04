@@ -1,135 +1,55 @@
-# GSD ROADMAP
+# ROADMAP.md
 
-> **Current Milestone**: Milestone 2: ML Recommendation Engine (V1)
-> **Goal**: Replace rule-based logic with XGBoost + FastAPI.
+> **Current Milestone**: Milestone 3: LangGraph Voice Chat Rebuild
+> **Goal**: Rebuild the voice chat AI from scratch using LangGraph in a parallel module to eliminate hallucinations. Test and integrate side-by-side with the old chat, removing the old chat only after validation.
 
----
+## Must-Haves
+- [ ] Build a new folder containing the LangGraph pipeline standalone.
+- [ ] Implement hallucination guardrails via explicit state graphs.
+- [ ] Support language matching with Android frontend choice.
+- [ ] Context fetching for job/skill options and weather/traffic.
+- [ ] strict extraction flow (Greeting -> Mood -> Platform -> Earnings -> Hours -> Summary).
+- [ ] Parallel integration without deleting old files first.
 
-## Milestone 1: Platform-to-Job Rebranding
-**Status**: ✅ Completed
+## Phases
 
-### Phase 1: Backend Core Refactor
-**Objective**: Migrate backend logic to 'job'.
-**Status**: ✅ Complete
+### Phase 1: Foundation & Context Management
+**Status**: ⬜ Not Started
+**Objective**: Set up LangGraph State, configure LLM logic, Context Loaders (mock profile/weather data), and System prompts to enforce frontend language selection.
 
-### Phase 2: Android UI Refactor
-**Objective**: Update Android app terminology and navigation.
-**Status**: ✅ Complete
+### Phase 2: Conversation Step 1 - Greeting & Check-in
+**Status**: ⬜ Not Started
+**Objective**: Implement the initial trigger: localized greeting and request for the user's mood.
+
+### Phase 3: Conversation Step 2 - Mood & Sentiment Analysis
+**Status**: ⬜ Not Started
+**Objective**: Integrate the sentiment analysis module. Analyze the user's mood response to determine score/summary and update state.
+
+### Phase 4: Conversation Step 3 - Platform / Job Selection
+**Status**: ⬜ Not Started
+**Objective**: Agent acknowledges mood appropriately and asks which platform they worked on today (verifying against registered list).
+
+### Phase 5: Conversation Step 4 - Earning Extraction
+**Status**: ⬜ Not Started
+**Objective**: Process user's response about platform, request earning amount, and extract earnings into state cleanly.
+
+### Phase 6: Conversation Step 5 - Hours Extraction
+**Status**: ⬜ Not Started
+**Objective**: Agent asks for hours worked and strictly extracts the numeric value into the state.
+
+### Phase 7: Conversation Step 6 - Final Summarization
+**Status**: ⬜ Not Started
+**Objective**: Agent generates final summary of the recorded shift data, incorporating the weather and traffic context for the *next* shift.
+
+### Phase 8: Parallel Integration & Live Testing
+**Status**: ⬜ Not Started
+**Objective**: Hook up the new module to the Kotlin app frontend parameters, tested side-by-side with old chatbot.
+
+### Phase 9: Sync to Backend Database & Legacy Cleanup
+**Status**: ⬜ Not Started
+**Objective**: Ensure shift and earning history updates reflect in the database properly, then safely delete old voice chat files.
 
 ---
 
 ## Milestone 2: ML Recommendation Engine (V1)
-**Status**: 🚧 Active
-
-### Phase 1: Dataset Engineering
-**Goal:** Generate 20,000 unbiased rows with market anchors and vehicle compatibility.
 **Status**: ✅ Complete
-1. ✅ Built Dataset Generator (Python).
-2. ✅ Applied Compatibility Mapping (17 jobs, 6 types).
-3. ✅ Validated — Compatible mean ₹148.84 vs Incompatible ₹10.02.
-
-### Phase 2: Training & Validation
-**Goal:** Train XGBoost and export the binary model.
-**Status**: ✅ Complete
-1. ✅ Feature Scaling and Encoding (6 categorical, 9 numerical).
-2. ✅ Model Tuning — R²=0.9359, RMSE=₹20.64, MAE=₹12.08.
-3. ✅ Exported model + SHAP + label encoders.
-
-### Phase 3: Inference API (FastAPI)
-**Goal:** Create a lightweight serving microservice.
-**Status**: ✅ Complete
-1. ✅ Built FastAPI skeleton (main.py).
-2. ✅ Ported preprocessing logic (label encoders + compatibility).
-3. ✅ Implemented /recommend and /health endpoints.
-
-### Phase 4: Full Stack Integration
-**Goal:** Connect Node.js to the new Python API.
-**Status**: ✅ Complete
-1. ✅ Rewrote jobRecommendationService.js to call ML API via fetch().
-2. ✅ Added fallback rule engine for ML API downtime.
-3. ✅ Updated jobController.js to pass vehicle type.
-4. ✅ Updated Android Dashboard with real recommendation card + reasons.
-5. ✅ Updated Recommendation data model for ML-specific fields.
-
-### Phase 5: Verification (Empirical)
-**Goal:** Prove the accuracy of the new engine.
-**Status**: ⏳ Pending
-1. Cross-compatibility audit.
-2. Latency/Stability testing.
-
-### Phase 6: Core UI Refinements & User Filtering
-**Goal:** Fix profile saving bugs and refine recommendation UX.
-**Status**: ⬜ Not Started
-1. Investigate and fix the bug dropping saved platforms/jobs in the Profile Screen.
-2. Enforce ML recommendations to strictly filter by the user's selected jobs/platforms.
-3. Redesign Dashboard recommendation card: show ONLY the absolute best option, and open a new page/sheet for alternatives.
-### Phase 7: Recommendations Empty State
-**Goal:** Handle UX for when users haven't registered any jobs.
-**Status**: ✅ Complete
-1. Detect if selected jobs are empty in Dashboard.
-2. Display a prompt urging users to 'Select Jobs to Get Recommendations' instead of making ML requests.
-3. Provide a button mapping directly to the Jobs selection screen.
-
-### Phase 8: Information Nudges
-**Status**: â¬œ Not Started
-**Objective**: Beautiful nudges and various types of contextual nudges for the user.
-**Depends on**: Phase 7
-
-**Tasks**:
-- [ ] TBD (run /plan 8 to create)
-
-**Verification**:
-- TBD
-
-### Phase 9: Theme & Location Persistence
-**Status**: â¬œ Not Started
-**Objective**: Fix theme switching (Dark/Light) and ensure location permissions are prompted correctly.
-**Tasks**:
-- [ ] Fix theme toggle (Dark/Light mode).
-- [ ] Implement location permission prompt when disabled.
-- [ ] Ensure persistence of theme preference.
-
-**Verification**:
-- Verify theme switch works and persists.
-- Verify location permission prompt is triggered when location is OFF.
-
----
-
-### Phase 10: ML Model Redesign (Skill Set & Expanded Types)
-**Status**: ✅ Complete
-**Objective**: Transition recommendation engine from vehicle-based to skill-based compatibility and add remaining job types.
-**Depends on**: Phase 4 (Full Stack Integration)
-
-**Tasks**:
-- [ ] Update `generate_dataset.py` to remove vehicle logic and add skill set mappings.
-- [ ] Add new job categories (On Demand Home Based Services, Remote Service Providers) to match the 5 target types.
-- [ ] Ensure the 5 types strictly are: On Demand home based services, Ride hailing instant delivery, Delivery workers in General, Ride hailing drivers (cab+ bike), Remote service providers.
-- [ ] Generate new synthetic dataset (20,000 rows) with the updated features.
-- [ ] Retrain XGBoost model and export the updated endpoints/scalers.
-- [ ] Update Python FastAPI (`main.py`) to accept `skill_set` instead of `vehicle`.
-- [ ] Update Node.js BE to process and send user skill set.
-- [ ] Update Android app UI to replace "Vehicle" selection with multi-select "Skill Sets" (3 Categories, 8 Skills).
-
-**Verification**:
-- Verify new ML API correctly categorizes all 5 types and filters appropriately based on the new skill set param.
-- Verify `vehicle` is safely removed from dataset and ML endpoints.
----
-
-### Phase 11: Shift History (Work Logs) UI Overhaul
-**Status**: ✅ Complete
-**Objective**: Redesign the Work Logs screen to be more visually engaging and professional.
-**Depends on**: Phase 10
-
-**Tasks**:
-- [ ] Implement `WorkLogsSummaryHeader` with total logs and sentiment stats.
-- [ ] Redesign `WorkLogCard` to a "Timeline" feed style with platform branding.
-- [ ] Replace `WorkLogDetailDialog` with `WorkLogDetailSheet` (ModalBottomSheet).
-- [ ] Implement **Chat Bubble View** for log transcripts to show conversation history.
-- [ ] Add loading skeletons and micro-animations for the history list.
-
-**Verification**:
-- Verify the list uses professional vector icons instead of emojis.
-- Verify the bottom sheet transitions are smooth and modern.
-- Verify the transcript is formatted as an interactive chat flow.
-
-
