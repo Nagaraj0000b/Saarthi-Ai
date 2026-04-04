@@ -175,6 +175,57 @@ def earnings_node(state: VoiceChatState) -> Dict[str, Any]:
         "current_step": "hours_extraction"
     }
 
+def hours_node(state: VoiceChatState) -> Dict[str, Any]:
+    """Extracts hours and moves to final summarization."""
+    headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
+    
+    # 1. Extract Hours from user input
+    payload_extract = {
+        "text": state.get("user_input", ""),
+        "platforms": state.get("jobs_list", [])
+    }
+    
+    try:
+        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=30)
+        resp_ext.raise_for_status()
+        data = resp_ext.json()
+        hours = data.get("hours")
+    except Exception as e:
+        print(f"Extraction error: {e}")
+        hours = None
+
+    # 2. Verify Hours
+    if not hours:
+        # Trigger retry_hours
+        return retry_node(state)
+
+    # 3. Get Acknowledgment and Final Summary
+    payload_reply = {
+        "language": state.get("language", "English"),
+        "state": "final_summary",
+        "platforms": state.get("jobs_list", []),
+        "dailyMood": { "moodLabel": state.get("mood", "Neutral") },
+        "extractedData": { 
+            "platform": state.get("selected_platform"),
+            "earnings": state.get("expected_earnings"),
+            "hours": str(hours)
+        }
+    }
+    
+    try:
+        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=30)
+        resp_reply.raise_for_status()
+        reply = resp_reply.json().get("summary", f"Got it, {hours} hours. Thanks for sharing!")
+    except Exception as e:
+        print(f"Hours acknowledgment error: {e}")
+        reply = f"Got it, {hours} hours. Thanks for sharing!"
+
+    return {
+        "hours_worked": str(hours),
+        "final_summary": reply,
+        "current_step": "final_summarization"
+    }
+
 def retry_node(state: VoiceChatState) -> Dict[str, Any]:
     """Handles empty or unintelligible user input by requesting a retry prompt from Node."""
     headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
