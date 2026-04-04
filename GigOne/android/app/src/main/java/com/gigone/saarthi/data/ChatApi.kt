@@ -21,6 +21,11 @@ interface ChatApi {
         @Body body: StartSessionRequest
     ): StartSessionResponse
 
+    @POST("chat-v2/start")
+    suspend fun startSessionV2(
+        @Body body: StartSessionRequest
+    ): StartSessionResponse
+
     /**
      * Submits a recorded audio file for transcription + AI reply.
      * Mirrors: POST /api/chat/reply  (multipart/form-data)
@@ -29,6 +34,18 @@ interface ChatApi {
     @Multipart
     @POST("chat/reply")
     suspend fun sendAudioReply(
+        @Part audio: MultipartBody.Part,
+        @Part("conversationId") conversationId: RequestBody,
+        @Part("language") language: RequestBody? = null,
+        @Part("platforms") platforms: RequestBody? = null,
+        @Part("skills") skills: RequestBody? = null,
+        @Part("lat") lat: RequestBody? = null,
+        @Part("lon") lon: RequestBody? = null
+    ): AudioReplyResponse
+
+    @Multipart
+    @POST("chat-v2/reply")
+    suspend fun sendAudioReplyV2(
         @Part audio: MultipartBody.Part,
         @Part("conversationId") conversationId: RequestBody,
         @Part("language") language: RequestBody? = null,

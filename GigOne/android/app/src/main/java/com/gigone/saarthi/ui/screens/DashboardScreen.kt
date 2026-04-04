@@ -70,10 +70,6 @@ fun DashboardScreen(
         }
     }
     
-    val LANGUAGES = remember { 
-        val prefs = TokenManager.getSelectedLanguages(ctx).toList().sorted()
-        if (prefs.isEmpty()) listOf("English", "Hindi") else prefs
-    }
     // ─── Collect state ───────────────────────────────────────────────────────
     val messages: List<ChatMessage> by vm.messages.collectAsStateWithLifecycle()
     val isProcessing: Boolean by vm.isProcessing.collectAsStateWithLifecycle()
@@ -84,6 +80,7 @@ fun DashboardScreen(
     val isRecommendationLoading: Boolean by vm.isRecommendationLoading.collectAsStateWithLifecycle()
     val recommendationError: String? by vm.recommendationError.collectAsStateWithLifecycle()
     val errorMessage: String? by vm.errorMessage.collectAsStateWithLifecycle()
+    val useV2Chat: Boolean by vm.useV2Chat.collectAsStateWithLifecycle()
 
     // ─── Error Handling ──────────────────────────────────────────────────────
     LaunchedEffect(errorMessage) {
@@ -156,8 +153,6 @@ fun DashboardScreen(
         }
     }
 
-    // ─── UI state ────────────────────────────────────────────────────────────
-
     // ─── Root layout ─────────────────────────────────────────────────────────
     Box(
         modifier = Modifier
@@ -179,20 +174,38 @@ fun DashboardScreen(
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                // Left: Language Pill
-                Surface(
-                    shape = RoundedCornerShape(12.dp),
-                    color = Color(0x0DFFFFFF),
-                    modifier = Modifier.clickable { showLangPicker = true }
-                ) {
-                    val shortLang = selectedLanguage.take(3).uppercase()
-                    Text(
-                        "🌐 $shortLang ▼",
-                        color = AppColors.Accent,
-                        fontSize = 14.sp,
-                        fontWeight = FontWeight.Bold,
-                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                    )
+                // Left: Language Pill and V2 Toggle
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = Color(0x0DFFFFFF),
+                        modifier = Modifier.clickable { showLangPicker = true }
+                    ) {
+                        val shortLang = selectedLanguage.take(3).uppercase()
+                        Text(
+                            "🌐 $shortLang ▼",
+                            color = AppColors.Accent,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
+                    
+                    Spacer(modifier = Modifier.width(8.dp))
+                    
+                    Surface(
+                        shape = RoundedCornerShape(12.dp),
+                        color = if (useV2Chat) AppColors.Primary.copy(alpha = 0.2f) else Color(0x0DFFFFFF),
+                        modifier = Modifier.clickable { vm.toggleV2Chat(!useV2Chat) }
+                    ) {
+                        Text(
+                            if (useV2Chat) "V2" else "V1",
+                            color = if (useV2Chat) AppColors.Primary else AppColors.TextSecondary,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                        )
+                    }
                 }
 
                 // Right side: Location + Profile
@@ -345,24 +358,30 @@ fun DashboardScreen(
                                         Text(
                                             topJob.job,
                                             color = AppColors.TextPrimary,
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.ExtraBold
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.ExtraBold,
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
                                         )
                                         if (!topJob.jobType.isNullOrEmpty()) {
                                             Text(
                                                 topJob.jobType!!,
                                                 color = AppColors.TextSecondary,
-                                                fontSize = 14.sp,
+                                                fontSize = 12.sp,
                                                 fontWeight = FontWeight.SemiBold,
-                                                modifier = Modifier.padding(top = 2.dp)
+                                                maxLines = 1,
+                                                overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                                modifier = Modifier.padding(top = 1.dp)
                                             )
                                         }
                                         Text(
                                             topJob.reason.ifEmpty { "Best earning potential" },
                                             color = AppColors.Accent,
-                                            fontSize = 14.sp,
+                                            fontSize = 12.sp,
                                             fontWeight = FontWeight.Medium,
-                                            modifier = Modifier.padding(top = 2.dp)
+                                            maxLines = 1,
+                                            overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                            modifier = Modifier.padding(top = 1.dp)
                                         )
                                     }
                                     // Earning badge
@@ -597,8 +616,12 @@ fun DashboardScreen(
                     )
                 },
                 text = {
+                    val currentLanguages = remember(showLangPicker) {
+                        val prefs = TokenManager.getSelectedLanguages(ctx).toList().sorted()
+                        if (prefs.isEmpty()) listOf("English", "Hindi") else prefs
+                    }
                     LazyColumn {
-                        items(LANGUAGES) { lang ->
+                        items(currentLanguages) { lang ->
                             val isSelected = lang == selectedLanguage
                             Surface(
                                 modifier = Modifier

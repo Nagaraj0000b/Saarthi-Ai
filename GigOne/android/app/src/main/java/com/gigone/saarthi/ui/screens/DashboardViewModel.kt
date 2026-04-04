@@ -77,6 +77,13 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
+    private val _useV2Chat = MutableStateFlow(false)
+    val useV2Chat: StateFlow<Boolean> = _useV2Chat.asStateFlow()
+
+    fun toggleV2Chat(enabled: Boolean) {
+        _useV2Chat.value = enabled
+    }
+
     fun clearError() {
         _errorMessage.value = null
     }
@@ -125,6 +132,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Fetch job recommendations based on current location. */
     fun loadRecommendations(onLocationDisabled: ((IntentSenderRequest) -> Unit)? = null) {
+        // Guard: drop duplicate calls if a fetch is already in-flight
+        if (_isRecommendationLoading.value) return
+
         viewModelScope.launch {
             _isRecommendationLoading.value = true
             _recommendationError.value = null
@@ -162,6 +172,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             }
         }
     }
+
 
     private suspend fun proceedWithRecommendations(loc: Location?) {
         if (loc == null) {
@@ -207,7 +218,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     lon = location?.longitude
                 )
                 
-                val data = chatApi.startSession(body)
+                val data = if (_useV2Chat.value) {
+                    chatApi.startSessionV2(body)
+                } else {
+                    chatApi.startSession(body)
+                }
                 conversationId = data.conversationId
                 _messages.value = listOf(ChatMessage("assistant", data.reply))
                 
