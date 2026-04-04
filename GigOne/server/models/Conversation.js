@@ -40,12 +40,19 @@ const conversationSchema = new mongoose.Schema({
     index: true,
   },
   /**
+   * Language preference for the conversation
+   */
+  language: {
+    type: String,
+    default: "English",
+  },
+  /**
    * Workflow State Machine
    * Defines the progression of the structured check-in.
    */
   step: {
     type: String,
-    enum: ["greeting", "mood", "job", "earnings", "hours", "summary", "done"],
+    enum: ["greeting", "mood", "job", "earnings", "hours", "summary", "done", "ask_platform", "retry_platform", "ask_earnings", "retry_earnings", "ask_hours", "retry_hours", "complete"],
     default: "greeting",
   },
   /**
@@ -54,8 +61,10 @@ const conversationSchema = new mongoose.Schema({
    */
   extractedData: {
     job: String,     // e.g., "uber", "swiggy"
+    platform: String,
     earnings: Number,     // e.g., 1200
     hours:    Number,     // e.g., 5
+    sentiment: String,
   },
   /**
    * Wellbeing Risk Assessment

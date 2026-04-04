@@ -37,7 +37,13 @@ const register = asyncHandler(async (req, res) => {
 
   res.status(201).json({
     token: generateToken(user),
-    user: { id: user._id, name: user.name, role: user.role },
+    user: {
+      id: user._id,
+      name: user.name,
+      role: user.role,
+      skills: user.skills,
+      registeredJobs: user.registeredJobs,
+    },
   });
 });
 
@@ -63,7 +69,34 @@ const login = asyncHandler(async (req, res) => {
 
   res.json({
     token: generateToken(user),
-    user: { id: user._id, name: user.name, role: user.role },
+    user: {
+      id: user._id,
+      name: user.name,
+      role: user.role,
+      skills: user.skills,
+      registeredJobs: user.registeredJobs,
+    },
+  });
+});
+
+const getProfile = asyncHandler(async (req, res) => {
+  const userId = req.user.userId;
+  const user = await User.findById(userId);
+
+  if (!user) {
+    throw new AppError("User not found", 404, { code: "USER_NOT_FOUND" });
+  }
+
+  res.json({
+    success: true,
+    user: {
+      id: user._id,
+      name: user.name,
+      email: user.email,
+      role: user.role,
+      skills: user.skills,
+      registeredJobs: user.registeredJobs,
+    },
   });
 });
 
@@ -99,4 +132,4 @@ const updateProfile = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { register, login, updateProfile };
+module.exports = { register, login, getProfile, updateProfile };

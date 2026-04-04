@@ -14,15 +14,15 @@
 ## Phases
 
 ### Phase 1: Foundation & Context Management
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Set up LangGraph State, configure LLM logic, Context Loaders (mock profile/weather data), and System prompts to enforce frontend language selection.
 
 ### Phase 2: Conversation Step 1 - Greeting & Check-in
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Implement the initial trigger: localized greeting and request for the user's mood.
 
 ### Phase 3: Conversation Step 2 - Mood & Sentiment Analysis
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Integrate the sentiment analysis module. Analyze the user's mood response to determine score/summary and update state.
 
 ### Phase 4: Conversation Step 3 - Platform / Job Selection

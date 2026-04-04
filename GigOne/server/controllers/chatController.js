@@ -8,11 +8,12 @@ const { getWeatherContext } = require("../services/weatherService");
 const { getTraffic } = require("../services/trafficService");
 const {
   generateGreeting,
-  processChatTurn,
-  getNextStep,
-  STEP_CONFIG,
+  evaluateChatState,
+  generateConstrainedReply,
+  generateRetryMessage,
 } = require("../services/conversationService");
 const { analyzeMoodText } = require("../services/sentimentService");
+const { extractGigData } = require("../services/geminiService");
 const { evaluateWellbeingRisk } = require("../services/wellbeingRiskService");
 const Conversation = require("../models/Conversation");
 const EarningsEntry = require("../models/EarningsEntry");
@@ -37,11 +38,6 @@ const calculateNextShiftTarget = () => {
   const target = new Date(now);
   const hour = now.getHours();
 
-  // Logic for next peak shift:
-  // 1. If currently morning (before 11 AM) -> Predict for Lunch peak (1:00 PM)
-  // 2. If currently mid-day (11 AM - 4 PM) -> Predict for Dinner peak (7:00 PM)
-  // 3. If currently evening/night (after 4 PM) -> Predict for tomorrow's Breakfast peak (8:00 AM)
-  
   if (hour < 11) {
     target.setHours(13, 0, 0, 0);
   } else if (hour < 16) {
@@ -52,35 +48,6 @@ const calculateNextShiftTarget = () => {
   }
 
   return Math.floor(target.getTime() / 1000);
-};
-
-const TEXT_TO_NUM = {
-  half: 0.5,
-  one: 1,
-  two: 2,
-  three: 3,
-  four: 4,
-  five: 5,
-  six: 6,
-  seven: 7,
-  eight: 8,
-  nine: 9,
-  ten: 10,
-  eleven: 11,
-  twelve: 12,
-};
-
-const STEP_FIELD_MAPPING = {
-  job: "job",
-  earnings: "earnings",
-  hours: "hours",
-};
-
-const MISSING_VALUE_REPLIES = {
-  job:
-    "Main theek se samajh nahi paaya ki aajne kis job par kaam kiya. Kya aap dobara bata sakte hain? (Uber, Swiggy, Rapido ya Other?)",
-  earnings: "Sorry, aapki aaj ki total earnings miss ho gayi. Kya aap amount dobara bata sakte ho?",
-  hours: "Sorry, total working hours miss ho gaye. Kya aap hours dobara bata sakte ho?",
 };
 
 const cleanupUploadedFile = async (filePath) => {
@@ -97,69 +64,12 @@ const cleanupUploadedFile = async (filePath) => {
   }
 };
 
-const parseExtractedNumber = (value) => {
-  if (typeof value === "number" && Number.isFinite(value)) {
-    return value;
-  }
-
-  if (typeof value !== "string") {
-    return null;
-  }
-
-  const normalized = value.toLowerCase();
-  const digitMatch = normalized.match(/[\d.]+/);
-  if (digitMatch) {
-    const parsed = Number(digitMatch[0]);
-    return Number.isFinite(parsed) ? parsed : null;
-  }
-
-  for (const [word, numericValue] of Object.entries(TEXT_TO_NUM)) {
-    if (normalized.includes(word)) {
-      return numericValue;
-    }
-  }
-
-  return null;
-};
-
-const normalizeExtractedValue = (currentStep, extractedValue) => {
-  if (extractedValue === null || extractedValue === undefined || extractedValue === "") {
-    return null;
-  }
-
-  if (currentStep === "job") {
-    try {
-      return normalizeJob(String(extractedValue));
-    } catch (error) {
-      return null;
-    }
-  }
-
-  if (currentStep === "earnings" || currentStep === "hours") {
-    return parseExtractedNumber(extractedValue);
-  }
-
-  return extractedValue;
-};
-
-const applyExtractedValue = (conversation, currentStep, extractedValue) => {
-  const field = STEP_FIELD_MAPPING[currentStep];
-  if (!field || extractedValue === null) {
-    return;
-  }
-
-  conversation.extractedData = conversation.extractedData || {};
-  conversation.extractedData[field] = extractedValue;
-};
-
 const calculateAndSaveBurnout = async (conversation) => {
   try {
     const riskData = await evaluateWellbeingRisk(conversation.userId, conversation.dailyMood);
     
-    // Save to the new Schema Block
     conversation.wellbeingRisk = riskData;
 
-    // Optional: Backwards compatibility bridging for older UI clients
     conversation.burnoutStatus = {
         isBurnoutAlert: riskData.riskLevel === "high",
         isStressWarning: riskData.riskLevel === "moderate",
@@ -172,14 +82,15 @@ const calculateAndSaveBurnout = async (conversation) => {
 };
 
 const persistAutoSavedEarnings = async (userId, extractedData) => {
-  if (!extractedData?.job || extractedData.earnings === undefined || extractedData.earnings === null) {
+  const job = extractedData?.platform || extractedData?.job;
+  if (!job || extractedData.earnings === undefined || extractedData.earnings === null) {
     return;
   }
 
   try {
     await EarningsEntry.create({
       userId,
-      job: normalizeJob(extractedData.job),
+      job: normalizeJob(job),
       amount: Number(extractedData.earnings) || 0,
       hours: Number(extractedData.hours) || 0,
     });
@@ -202,47 +113,58 @@ const findConversationForUser = async (conversationId, userId) => {
 
 const runChatTurn = async ({ conversation, originalText, translatedText, language, context, userId }) => {
   const currentStep = conversation.step;
-  const turnResult = await processChatTurn(
-    currentStep,
-    originalText,
-    conversation.messages,
-    context,
-    language || null
-  );
 
-  let aiReply = turnResult.reply;
-  const normalizedValue = normalizeExtractedValue(currentStep, turnResult.extractedValue);
+  // 1. NLU Extraction (Pass platforms for intelligent STT spelling correction)
+  const newlyExtractedData = await extractGigData(translatedText || originalText, context?.platforms || []);
 
-  if (currentStep === "mood") {
-    // Send the ENGLISH translation to the sentiment model for better accuracy
+  // Still use existing dedicated sentiment analysis model for mood step
+  if (currentStep === "mood" || currentStep === "greeting") {
     conversation.dailyMood = await analyzeMoodText(translatedText || originalText, {
       language: "English", 
       sourceStep: "mood",
     });
   }
 
-  // Save the user's ORIGINAL language in the history
+  // 2. Evaluate State
+  const existingData = conversation.extractedData || {};
+  
+  // Merge newly extracted data with existing data, keeping existing values if new ones are null
+  const mergedData = { ...existingData };
+  Object.keys(newlyExtractedData).forEach(key => {
+    if (newlyExtractedData[key] !== null && newlyExtractedData[key] !== undefined) {
+      mergedData[key] = newlyExtractedData[key];
+    }
+  });
+
+  let nextState = evaluateChatState(currentStep, newlyExtractedData, existingData);
+
+  // Update conversation state early so we have accurate data for the templates
+  conversation.extractedData = mergedData;
+
+  // 3. Generate Reply with rich context
+  const replyContext = {
+    ...context,
+    dailyMood: conversation.dailyMood,
+    extractedData: mergedData
+  };
+  const aiReply = await generateConstrainedReply(nextState, replyContext, language);
+
+  // 4. Finalize state
   conversation.messages.push({ role: "user", text: originalText });
-
-  if (normalizedValue === null && STEP_CONFIG[currentStep]?.extract) {
-    // We let the AI naturally re-ask or apologize via the main prompt logic
-    // rather than using a hardcoded string here. 
-  }
-
-  applyExtractedValue(conversation, currentStep, normalizedValue);
   conversation.messages.push({ role: "assistant", text: aiReply });
 
-  const nextStep = getNextStep(currentStep, normalizedValue);
-  conversation.step = nextStep;
+  // Map 'complete' from the state machine to 'done' for the DB schema
+  const dbStep = nextState === "complete" ? "done" : nextState;
+  conversation.step = dbStep;
 
-  if (currentStep !== "done" && nextStep === "done") {
+  if (currentStep !== "done" && dbStep === "done") {
     await calculateAndSaveBurnout(conversation);
     await persistAutoSavedEarnings(userId, conversation.extractedData);
   }
 
   await conversation.save();
 
-  return { aiReply, nextStep };
+  return { aiReply, nextStep: dbStep };
 };
 
 const getContext = asyncHandler(async (req, res) => {
@@ -262,7 +184,7 @@ const startChat = asyncHandler(async (req, res) => {
   const user = await User.findById(userId).select("name");
   const lastDone = await Conversation.findOne({ userId, step: "done" }).sort({ createdAt: -1 });
   
-  const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+  const language = typeof req.body.language === "string" ? req.body.language.trim() : "English";
   const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
   const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
 
@@ -272,17 +194,18 @@ const startChat = asyncHandler(async (req, res) => {
     skills
   };
 
-  const greeting = await generateGreeting(user?.name || "buddy", context, language || null);
+  const greeting = await generateGreeting(user?.name || "buddy", context, language);
 
   const conversation = await Conversation.create({
     userId,
-    step: "mood",
+    step: "greeting",
+    language,
     messages: [{ role: "assistant", text: greeting }],
   });
 
   res.json({
     conversationId: conversation._id,
-    step: "mood",
+    step: "greeting",
     reply: greeting,
   });
 });
@@ -297,7 +220,6 @@ const reply = asyncHandler(async (req, res) => {
   try {
     const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
     const coordinates = parseCoordinates(req.body.lat, req.body.lon);
-    const transcriptionLanguage = typeof req.body.language === "string" ? req.body.language.trim() : null;
     
     const platforms = typeof req.body.platforms === "string" ? req.body.platforms.split(",").filter(Boolean) : [];
     const skills = typeof req.body.skills === "string" ? req.body.skills.split(",").filter(Boolean) : [];
@@ -305,8 +227,13 @@ const reply = asyncHandler(async (req, res) => {
     const conversation = await findConversationForUser(conversationId, req.user.userId);
     const targetTime = calculateNextShiftTarget();
 
-    // Fetch weather/traffic ONLY if we are at the final step (hours)
-    const shouldFetchContext = conversation.step === "hours" && coordinates;
+    let transcriptionLanguage = typeof req.body.language === "string" ? req.body.language.trim() : null;
+    if (!transcriptionLanguage && conversation.language) {
+      transcriptionLanguage = conversation.language;
+    }
+
+    // Fetch weather/traffic ONLY if we are near the final steps
+    const shouldFetchContext = (conversation.step === "ask_hours" || conversation.step === "hours" || conversation.step === "retry_hours") && coordinates;
 
     const contextPromise = shouldFetchContext
       ? Promise.all([
@@ -319,7 +246,7 @@ const reply = asyncHandler(async (req, res) => {
       : Promise.resolve([null, null]);
 
     const [transcriptionResult, [weather, traffic]] = await Promise.all([
-      transcribeAudio(filePath, language),
+      transcribeAudio(filePath, transcriptionLanguage),
       contextPromise,
     ]);
 
@@ -327,10 +254,26 @@ const reply = asyncHandler(async (req, res) => {
     const transcriptionTranslated = transcriptionResult?.translatedText || "";
 
     if (transcriptionOriginal.trim().length === 0) {
+      let retryState = "retry_platform";
+      if (conversation.step === "ask_earnings" || conversation.step === "retry_earnings" || conversation.step === "earnings") {
+        retryState = "retry_earnings";
+      } else if (conversation.step === "ask_hours" || conversation.step === "retry_hours" || conversation.step === "hours") {
+        retryState = "retry_hours";
+      }
+
+      const replyContext = {
+        platforms,
+        skills,
+        dailyMood: conversation.dailyMood,
+        extractedData: conversation.extractedData
+      };
+
+      const retryMessage = await generateConstrainedReply(retryState, replyContext, transcriptionLanguage);
+
       return res.json({
         conversationId: conversation._id,
         transcription: "(No speech detected)",
-        reply: "I couldn't hear anything. Please try speaking again.",
+        reply: retryMessage,
         step: conversation.step,
         extractedData: conversation.extractedData,
         burnoutStatus: conversation.burnoutStatus,
@@ -343,7 +286,7 @@ const reply = asyncHandler(async (req, res) => {
       conversation,
       originalText: transcriptionOriginal.trim(),
       translatedText: transcriptionTranslated.trim(),
-      language,
+      language: transcriptionLanguage,
       context: { 
         ...(weather ? { weather } : {}),
         ...(traffic ? { traffic } : {}),
@@ -371,16 +314,20 @@ const reply = asyncHandler(async (req, res) => {
 const replyText = asyncHandler(async (req, res) => {
   const conversationId = ensureNonEmptyString(req.body.conversationId, "conversationId");
   const text = ensureNonEmptyString(req.body.text, "text");
-  const language = typeof req.body.language === "string" ? req.body.language.trim() : null;
   const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
   const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
 
   const conversation = await findConversationForUser(conversationId, req.user.userId);
 
+  let language = typeof req.body.language === "string" ? req.body.language.trim() : null;
+  if (!language && conversation.language) {
+    language = conversation.language;
+  }
+
   const { aiReply, nextStep } = await runChatTurn({
     conversation,
     originalText: text,
-    translatedText: text, // No translation step in text-only fallback currently
+    translatedText: text,
     language,
     context: { platforms, skills },
     userId: req.user.userId,
@@ -442,6 +389,24 @@ const deleteConversation = asyncHandler(async (req, res) => {
   res.json({ message: "Conversation deleted successfully" });
 });
 
+const getRawGreeting = asyncHandler(async (req, res) => {
+  const user = req.user ? await User.findById(req.user.userId).select("name") : null;
+  const language = typeof req.body.language === "string" ? req.body.language.trim() : "English";
+  const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
+  const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
+  
+  const context = { platforms, skills };
+  const greeting = await generateGreeting(user?.name || "buddy", context, language);
+  res.json({ greeting });
+});
+
+const analyzeRawSentiment = asyncHandler(async (req, res) => {
+  const language = typeof req.body.language === "string" ? req.body.language.trim() : "English";
+  const text = req.body.text || "";
+  const result = await analyzeMoodText(text, { language, sourceStep: "mood" });
+  res.json(result);
+});
+
 module.exports = {
   getContext,
   startChat,
@@ -450,4 +415,6 @@ module.exports = {
   getBurnoutStatus,
   getChatHistory,
   deleteConversation,
+  getRawGreeting,
+  analyzeRawSentiment,
 };

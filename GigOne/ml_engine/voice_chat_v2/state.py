@@ -3,6 +3,7 @@ from typing import TypedDict, List, Optional
 class VoiceChatState(TypedDict, total=False):
     language: str
     user_token: str
+    user_input: str
     lat: float
     lon: float
     jobs_list: List[str]

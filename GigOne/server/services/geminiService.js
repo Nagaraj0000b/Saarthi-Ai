@@ -103,4 +103,67 @@ Text: "${text}"
   }
 };
 
-module.exports = { analyzeSentiment };
+const extractGigData = async (transcript, validPlatforms = []) => {
+  if (typeof transcript !== "string" || transcript.trim().length === 0) {
+    return { platform: null, earnings: null, hours: null, sentiment: null };
+  }
+
+  const platformsContext = validPlatforms.length > 0 
+    ? `The user's known platforms are: ${validPlatforms.join(", ")}. If the user mentions something that sounds like one of these, map it to the exact known name.`
+    : `Look for common gig platforms like Uber, Ola, Swiggy, Zomato, Rapido, Amazon Flex, etc.`;
+
+  const prompt = `
+Extract gig work details from this transcript: "${transcript}"
+
+Rules:
+1. Identify the platform (job/app). ${platformsContext}
+2. Identify earnings (money earned).
+3. Identify hours worked.
+4. Identify sentiment.
+
+Return ONLY JSON:
+{
+  "platform": "string or null",
+  "earnings": "number or null",
+  "hours": "number or null",
+  "sentiment": "positive|neutral|negative or null"
+}
+
+Note: Be very lenient. If they say "I did some swiggy today", platform is "Swiggy". If they say "made 500 on uber", platform is "Uber", earnings is 500.
+  `.trim();
+
+  let cleaned;
+  try {
+    const result = await getModel().generateContent({
+      contents: [{ role: "user", parts: [{ text: prompt }] }],
+    });
+    const response = await result.response;
+    cleaned = response.candidates[0].content.parts[0].text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+  } catch (error) {
+    console.error("Gig Data Extraction failed:", error.message);
+    return { platform: null, earnings: null, hours: null, sentiment: null };
+  }
+
+  try {
+    const parsed = JSON.parse(cleaned);
+    
+    // Robust number parsing for earnings and hours
+    const parseNum = (val) => {
+      if (val === null || val === undefined || val === "") return null;
+      const n = Number(val);
+      return Number.isFinite(n) ? n : null;
+    };
+
+    return {
+      platform: parsed.platform || null,
+      earnings: parseNum(parsed.earnings),
+      hours: parseNum(parsed.hours),
+      sentiment: parsed.sentiment || null,
+    };
+  } catch (error) {
+    console.error("Failed to parse Gig Data JSON:", error.message);
+    return { platform: null, earnings: null, hours: null, sentiment: null };
+  }
+};
+
+module.exports = { analyzeSentiment, extractGigData };
