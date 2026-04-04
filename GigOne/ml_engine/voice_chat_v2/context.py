@@ -22,46 +22,22 @@ def load_user_profile(user_token: str) -> Dict[str, List[str]]:
         print(f"Error loading user profile: {e}")
         return {"jobs": [], "skills": []}
 
-def load_weather_traffic(lat: float, lon: float) -> Dict[str, str]:
-    """Fetch live weather and traffic conditions using external APIs (not numbers, conditions only)."""
-    weather_condition = "unavailable"
-    traffic_condition = "unavailable"
-    
-    # OpenWeather fetching
-    weather_key = os.environ.get("OPENWEATHER_API_KEY")
-    if weather_key:
-        try:
-            url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={weather_key}"
-            res = requests.get(url, timeout=5)
-            if res.status_code == 200:
-                weather_desc = res.json().get("weather", [{}])[0].get("description", "")
-                if weather_desc:
-                    weather_condition = weather_desc
-        except Exception as e:
-            print(f"Weather fetch error: {e}")
-            
-    # TomTom Traffic fetching
-    tomtom_key = os.environ.get("TOMTOM_API_KEY")
-    if tomtom_key:
-        try:
-            url = f"https://api.tomtom.com/traffic/services/4/flowSegmentData/absolute/10/json?point={lat},{lon}&key={tomtom_key}"
-            res = requests.get(url, timeout=5)
-            if res.status_code == 200:
-                flow_data = res.json().get("flowSegmentData", {})
-                current_speed = flow_data.get("currentSpeed", 0)
-                free_flow = flow_data.get("freeFlowSpeed", 1)
-                
-                # Turn numbers into conditions per requirements
-                if current_speed < free_flow * 0.5:
-                    traffic_condition = "heavy traffic"
-                elif current_speed < free_flow * 0.8:
-                    traffic_condition = "moderate traffic"
-                else:
-                    traffic_condition = "light traffic"
-        except Exception as e:
-            print(f"Traffic fetch error: {e}")
-            
-    return {
-        "weather_condition": weather_condition,
-        "traffic_condition": traffic_condition
-    }
+def load_weather_traffic(user_token: str, lat: float, lon: float) -> Dict[str, str]:
+    """Fetch live weather and traffic conditions using the Node backend API."""
+    headers = {"Authorization": f"Bearer {user_token}"}
+    try:
+        url = f"{NODE_BACKEND_URL}/api/chat/context?lat={lat}&lon={lon}"
+        response = requests.get(url, headers=headers, timeout=5)
+        response.raise_for_status()
+        data = response.json()
+        
+        return {
+            "weather_condition": data.get("weather", "unavailable"),
+            "traffic_condition": data.get("traffic", "unavailable")
+        }
+    except Exception as e:
+        print(f"Error loading weather/traffic: {e}")
+        return {
+            "weather_condition": "unavailable",
+            "traffic_condition": "unavailable"
+        }
