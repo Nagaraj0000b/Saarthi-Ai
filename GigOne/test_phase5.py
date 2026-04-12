@@ -36,7 +36,7 @@ def run_test():
     # --- TURN 1: START ---
     print("\n--- TURN 1: START ---")
     state = {
-        "language": "English",
+        "language": "Hindi",
         "user_token": token,
         "jobs_list": ["Uber", "Swiggy"],
         "skills_list": ["Driving"]
@@ -64,9 +64,33 @@ def run_test():
     print(f"🤖 AI: {state.get('final_summary')}")
     print(f"📍 Step: {state.get('current_step')}")
 
-    # --- TURN 4: EARNINGS ---
-    print("\n--- TURN 4: EARNINGS ---")
-    state["user_input"] = "I made around 1500 rupees"
+    # --- TURN 4: INVALID EARNINGS (RETRY) ---
+    print("\n--- TURN 4: INVALID EARNINGS (RETRY) ---")
+    state["user_input"] = "I made around x rupees"
+    state = graph.invoke(state)
+    print(f"👤 User: {state.get('user_input')}")
+    print(f"💰 Earnings: {state.get('expected_earnings')}")
+    print(f"🤖 AI: {state.get('final_summary')}")
+    print(f"📍 Step: {state.get('current_step')}")
+    
+    assert state.get("current_step") == "earnings_extraction", "Should not advance on invalid earnings."
+    print("✅ Successfully handled invalid earnings input (Retry triggered).")
+
+    # --- TURN 5: EMPTY EARNINGS (RETRY) ---
+    print("\n--- TURN 5: EMPTY EARNINGS (RETRY) ---")
+    state["user_input"] = ""
+    state = graph.invoke(state)
+    print(f"👤 User: {state.get('user_input')}")
+    print(f"💰 Earnings: {state.get('expected_earnings')}")
+    print(f"🤖 AI: {state.get('final_summary')}")
+    print(f"📍 Step: {state.get('current_step')}")
+    
+    assert state.get("current_step") == "earnings_extraction", "Should not advance on empty earnings."
+    print("✅ Successfully handled empty earnings input (Retry triggered).")
+
+    # --- TURN 6: VALID EARNINGS ---
+    print("\n--- TURN 6: VALID EARNINGS ---")
+    state["user_input"] = "I made around three hundered rupees"
     state = graph.invoke(state)
     print(f"👤 User: {state.get('user_input')}")
     print(f"💰 Earnings: {state.get('expected_earnings')}")

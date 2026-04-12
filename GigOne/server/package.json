@@ -4,7 +4,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
-    "dev": "nodemon index.js"
+    "dev": "nodemon index.js",
+    "test": "jest --verbose --forceExit --detectOpenHandles",
+    "test:nudges": "jest --verbose --forceExit --detectOpenHandles tests/nudges/"
   },
   "author": "",
   "license": "ISC",
@@ -25,6 +27,7 @@
     "jsonwebtoken": "^9.0.3",
     "mongoose": "^9.2.2",
     "multer": "^2.0.2",
+    "node-cron": "^4.2.1",
     "node-microphone": "^0.1.6",
     "node-record-lpcm16": "^1.0.1",
     "passport": "^0.7.0",
@@ -32,6 +35,7 @@
     "recorder-js": "^1.0.7"
   },
   "devDependencies": {
+    "jest": "^30.3.0",
     "nodemon": "^3.1.14"
   }
 }

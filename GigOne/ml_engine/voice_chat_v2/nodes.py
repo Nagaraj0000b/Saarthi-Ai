@@ -232,7 +232,12 @@ def final_summary_node(state: VoiceChatState) -> Dict[str, Any]:
 
     return {
         "final_summary": reply,
-        "current_step": "completed"
+        "current_step": "completed",
+        "extracted_data": {
+            "selected_platform": state.get("selected_platform"),
+            "expected_earnings": state.get("expected_earnings"),
+            "hours_worked": state.get("hours_worked")
+        }
     }
 
 def retry_node(state: VoiceChatState) -> Dict[str, Any]:

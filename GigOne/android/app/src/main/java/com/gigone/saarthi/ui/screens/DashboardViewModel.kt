@@ -77,13 +77,6 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val _errorMessage = MutableStateFlow<String?>(null)
     val errorMessage: StateFlow<String?> = _errorMessage.asStateFlow()
 
-    private val _useV2Chat = MutableStateFlow(false)
-    val useV2Chat: StateFlow<Boolean> = _useV2Chat.asStateFlow()
-
-    fun toggleV2Chat(enabled: Boolean) {
-        _useV2Chat.value = enabled
-    }
-
     fun clearError() {
         _errorMessage.value = null
     }
@@ -190,7 +183,11 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
             val response = chatApi.getJobRecommendations(loc.latitude, loc.longitude, jobsStr, skillsStr)
             _recommendation.value = response.data
         } catch (e: HttpException) {
-            _errorMessage.value = "Server error, please try again later."
+            if (e.code() == 401) {
+                forceLogout()
+            } else {
+                _errorMessage.value = "Server error, please try again later."
+            }
         } catch (e: IOException) {
             _errorMessage.value = "Network error, please check your connection."
         } catch (e: Exception) {
@@ -218,19 +215,19 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     lon = location?.longitude
                 )
                 
-                val data = if (_useV2Chat.value) {
-                    chatApi.startSessionV2(body)
-                } else {
-                    chatApi.startSession(body)
-                }
+                val data = chatApi.startSession(body)
                 conversationId = data.conversationId
                 _messages.value = listOf(ChatMessage("assistant", data.reply))
                 
                 val token = TokenManager.getToken(ctx) ?: ""
                 ttsPlayer.speak(data.reply, _selectedLanguage.value, token)
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
-                _messages.value = listOf(ChatMessage("assistant", "⚠️ Could not connect to server. Try again."))
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                    _messages.value = listOf(ChatMessage("assistant", "⚠️ Could not connect to server. Try again."))
+                }
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
                 _messages.value = listOf(ChatMessage("assistant", "⚠️ Network error. Check your internet."))
@@ -330,11 +327,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 audioFile.delete()
 
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
-                val current = _messages.value.dropLast(1)
-                _messages.value = current + ChatMessage(
-                    "assistant", "⚠️ Server error."
-                )
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                    val current = _messages.value.dropLast(1)
+                    _messages.value = current + ChatMessage(
+                        "assistant", "⚠️ Server error."
+                    )
+                }
                 audioFile.delete()
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
@@ -440,5 +441,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         super.onCleared()
         ttsPlayer.shutdown()
         voiceRecorder.cancel()
+    }
+
+    private fun forceLogout() {
+        val app = getApplication<Application>()
+        // Aggressively clear common SharedPreferences to ensure the token is wiped
+        app.getSharedPreferences("saarthi_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        app.getSharedPreferences("auth_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        
+        // Force-restart the application to the Launcher Activity (SignIn)
+        val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        if (intent != null) app.startActivity(intent)
     }
 }

@@ -32,7 +32,9 @@ fun getJobVisual(job: String): JobVisual {
 fun formatIsoDate(isoString: String, format: String = "dd MMM, yyyy"): String {
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("UTC")
         val formatter = SimpleDateFormat(format, Locale.getDefault())
+        formatter.timeZone = TimeZone.getDefault()
         val date = parser.parse(isoString) ?: return isoString
         formatter.format(date)
     } catch (e: Exception) {
@@ -43,6 +45,7 @@ fun formatIsoDate(isoString: String, format: String = "dd MMM, yyyy"): String {
 fun getRelativeDateLabel(isoString: String): String {
     return try {
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("UTC")
         val date = parser.parse(isoString) ?: return "Older"
         
         val now = Calendar.getInstance()

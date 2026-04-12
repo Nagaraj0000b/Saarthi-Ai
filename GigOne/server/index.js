@@ -27,8 +27,9 @@ app.use(passport.initialize());
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/earnings", require("./routes/earnings"));
 app.use("/api/worklogs", require("./routes/worklogs"));
-app.use("/api/chat", require("./routes/chat"));
+app.use("/api/chat-v2", require("./routes/chatV2"));
 app.use("/api/jobs", require("./routes/jobs"));
+app.use("/api/nudges", require("./routes/nudges"));
 app.use("/api/tts", ttsRoutes);
 
 app.get("/", (req, res) => {
@@ -70,6 +71,16 @@ const bootstrap = async () => {
 
   server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on port ${PORT} (bound to 0.0.0.0)`);
+
+    // ── Start Nudge Engine background jobs ─────────────────────────
+    try {
+      require("./jobs/nightlyNudgeScheduler").start();
+      require("./services/nudgeEvaluators/environmentalNudgeEvaluator").startPolling();
+      require("./services/nudgeEvaluators/surgeNudgeEvaluator").startPolling();
+      console.log("Nudge Engine: All background jobs started.");
+    } catch (err) {
+      console.warn("Nudge Engine: Failed to start some jobs:", err.message);
+    }
   });
 
   return server;

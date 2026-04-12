@@ -156,15 +156,7 @@ fun ManageJobsScreen(
     val selectedSkills = remember { TokenManager.getSkills(context) }
     
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val isSuccess by vm.isSuccess.collectAsStateWithLifecycle()
     val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
-
-    LaunchedEffect(isSuccess) {
-        if (isSuccess) {
-            Toast.makeText(context, "Jobs updated!", Toast.LENGTH_SHORT).show()
-            vm.clearStatus()
-        }
-    }
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -186,12 +178,16 @@ fun ManageJobsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
             TopAppBar(
-                title = { Text("Jobs", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { 
+                    Column {
+                        Text("Jobs", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        if (isLoading) {
+                            Text("Saving...", color = AppColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = { 
-                        vm.syncProfile(selectedSkills, selectedJobs)
-                        navController.popBackStack()
-                    }) {
+                    IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
                     }
                 },
@@ -200,13 +196,23 @@ fun ManageJobsScreen(
             Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
                 SearchAndAddSection(
                     title = "My Jobs",
-                    subtitle = "Search or add jobs you work for.",
+                    subtitle = "Search or add jobs you work for. Changes are saved automatically.",
                     selectedItems = selectedJobs,
                     suggestions = allJobs,
                     placeholder = "Search or type job",
                     chipColor = AppColors.Accent,
-                    onAdd = { newJob -> if (newJob.isNotBlank()) selectedJobs = selectedJobs + newJob },
-                    onRemove = { jobToRemove -> selectedJobs = selectedJobs - jobToRemove }
+                    onAdd = { newJob -> 
+                        if (newJob.isNotBlank()) {
+                            val newList = selectedJobs + newJob
+                            selectedJobs = newList
+                            vm.syncProfileDebounced(selectedSkills, newList)
+                        }
+                    },
+                    onRemove = { jobToRemove -> 
+                        val newList = selectedJobs - jobToRemove
+                        selectedJobs = newList
+                        vm.syncProfileDebounced(selectedSkills, newList)
+                    }
                 )
             }
         }
@@ -223,15 +229,8 @@ fun ManageSkillsScreen(
     var selectedSkills by remember { mutableStateOf(TokenManager.getSkills(context)) }
     val selectedJobs = remember { TokenManager.getJobs(context) }
     
-    val isSuccess by vm.isSuccess.collectAsStateWithLifecycle()
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
     val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
-
-    LaunchedEffect(isSuccess) {
-        if (isSuccess) {
-            Toast.makeText(context, "Skills updated!", Toast.LENGTH_SHORT).show()
-            vm.clearStatus()
-        }
-    }
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -254,12 +253,16 @@ fun ManageSkillsScreen(
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
             TopAppBar(
-                title = { Text("Skill Sets", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { 
+                    Column {
+                        Text("Skill Sets", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        if (isLoading) {
+                            Text("Saving...", color = AppColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = { 
-                        vm.syncProfile(selectedSkills, selectedJobs)
-                        navController.popBackStack()
-                    }) {
+                    IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
                     }
                 },
@@ -268,13 +271,23 @@ fun ManageSkillsScreen(
             Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
                 SearchAndAddSection(
                     title = "My Skills",
-                    subtitle = "Select skills you possess for better job matches.",
+                    subtitle = "Select skills you possess for better job matches. Changes are saved automatically.",
                     selectedItems = selectedSkills,
                     suggestions = allSkills,
                     placeholder = "Search or select skill",
                     chipColor = AppColors.Success,
-                    onAdd = { newSkill -> if (newSkill.isNotBlank()) selectedSkills = selectedSkills + newSkill },
-                    onRemove = { skillToRemove -> selectedSkills = selectedSkills - skillToRemove }
+                    onAdd = { newSkill -> 
+                        if (newSkill.isNotBlank()) {
+                            val newList = selectedSkills + newSkill
+                            selectedSkills = newList
+                            vm.syncProfileDebounced(newList, selectedJobs)
+                        }
+                    },
+                    onRemove = { skillToRemove -> 
+                        val newList = selectedSkills - skillToRemove
+                        selectedSkills = newList
+                        vm.syncProfileDebounced(newList, selectedJobs)
+                    }
                 )
             }
         }

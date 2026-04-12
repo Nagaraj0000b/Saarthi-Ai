@@ -309,7 +309,34 @@ def process_chat_turn(payload: Dict[str, Any] = Body(...)):
     Receives the current state and returns the new state.
     """
     try:
-        new_state = graph_app.invoke(payload)
+        state_payload = dict(payload)
+        legacy_data = state_payload.get("extracted_data") or state_payload.get("extractedData") or {}
+
+        def pick_first(*values):
+            for value in values:
+                if value is not None and value != "":
+                    return value
+            return None
+
+        state_payload["selected_platform"] = pick_first(
+            state_payload.get("selected_platform"),
+            legacy_data.get("selected_platform"),
+            legacy_data.get("platform"),
+            legacy_data.get("job"),
+        )
+        state_payload["expected_earnings"] = pick_first(
+            state_payload.get("expected_earnings"),
+            legacy_data.get("expected_earnings"),
+            legacy_data.get("earnings"),
+            legacy_data.get("amount"),
+        )
+        state_payload["hours_worked"] = pick_first(
+            state_payload.get("hours_worked"),
+            legacy_data.get("hours_worked"),
+            legacy_data.get("hours"),
+        )
+
+        new_state = graph_app.invoke(state_payload)
         return new_state
     except Exception as error_message:
         raise HTTPException(status_code=500, detail=str(error_message))

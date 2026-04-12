@@ -109,7 +109,7 @@ const extractGigData = async (transcript, validPlatforms = []) => {
   }
 
   const platformsContext = validPlatforms.length > 0 
-    ? `The user's known platforms are: ${validPlatforms.join(", ")}. If the user mentions something that sounds like one of these, map it to the exact known name.`
+    ? `The user's known platforms are: ${validPlatforms.join(", ")}. If the user mentions something that sounds like one of these (e.g. "बोला" sounds like "Ola"), map it exactly to the registered name.`
     : `Look for common gig platforms like Uber, Ola, Swiggy, Zomato, Rapido, Amazon Flex, etc.`;
 
   const prompt = `
@@ -129,7 +129,12 @@ Return ONLY JSON:
   "sentiment": "positive|neutral|negative or null"
 }
 
-Note: Be very lenient. If they say "I did some swiggy today", platform is "Swiggy". If they say "made 500 on uber", platform is "Uber", earnings is 500.
+Note: Be extremely flexible with phonetic variations in Hinglish. 
+- "बोला पे" or "बोला" -> "Ola"
+- "ऊबर" or "उबर" -> "Uber"
+- "स्विग्गी" -> "Swiggy"
+- If they say "I did some swiggy today", platform is "Swiggy". 
+- If they say "made 500 on uber", platform is "Uber", earnings is 500.
   `.trim();
 
   let cleaned;

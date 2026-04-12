@@ -41,7 +41,6 @@ let translateClient;
 
 const getSpeechClient = () => {
   if (!speechClient) {
-    // Ensure credential.json exists in the server root
     const keyFilename = path.join(__dirname, "..", "credential.json");
     if (!fs.existsSync(keyFilename)) {
       throw new AppError("Google Cloud credential.json not found in server root.", 500, {
@@ -77,82 +76,66 @@ const transcribeAudio = async (filePath, language = null) => {
   }
 
   try {
-    // Check if file exists
     await fs.promises.access(filePath);
-
-    // Read the audio file into memory
     const audioBytes = fs.readFileSync(filePath).toString("base64");
 
-    const audio = {
-      content: audioBytes,
-    };
+    const audio = { content: audioBytes };
 
-    // Resolve the primary language. When a user selects Kannada, kn-IN becomes
-    // the primary code — GCP STT strongly biases toward the primary language.
     const primaryCode = resolveBcp47(language);
-    const alternatives = ALL_LANGUAGE_CODES.filter((c) => c !== primaryCode);
+    // Limit alternatives to prevent confusion, prioritize Hindi for Indian accents
+    const alternatives = ["hi-IN", "en-IN"].filter(c => c !== primaryCode);
 
-    // Configuration for Google STT
     const config = {
-      // The frontend sends standard webm/ogg/mp4/m4a blobs depending on the browser.
-      // WEBM_OPUS or MP3 are common, but leaving encoding blank allows GCP to auto-detect
-      // for most standard container formats (like FLAC, WAV, MP3, etc).
-      // If the audio is raw PCM, encoding needs to be specified.
       languageCode: primaryCode,
       alternativeLanguageCodes: alternatives,
       enableAutomaticPunctuation: true,
+      model: "latest_short", // Optimized for short conversational bursts
+      useEnhanced: true,
+      speechContexts: [{
+        phrases: [
+          "Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Porter", 
+          "Earnings", "Earnings today", "Shift", "Rupees", "Hours", 
+          "Worked for", "I made", "My earnings", "today's earnings",
+          "done for the day", "feeling good", "feeling tired"
+        ],
+        boost: 20.0 // Give high priority to gig-work vocabulary
+      }]
     };
 
-    const request = {
-      audio: audio,
-      config: config,
-    };
-
+    const request = { audio, config };
     const client = getSpeechClient();
-    
-    // Perform the transcription request
     const [response] = await client.recognize(request);
 
-    // Extract the transcript from the response
     const transcription = response.results
       .map(result => result.alternatives[0].transcript)
       .join("\n");
 
     if (!transcription) {
-      console.warn("[GCP STT] No speech detected in audio file.");
-      return "";
+      console.warn("[GCP STT] No speech detected.");
+      return { originalText: "", translatedText: "" };
     }
 
     const transcribedText = transcription.trim();
 
     try {
-      // 1. Translate the transcribed text to English meaning for AI context
+      // If the result is already English, don't waste units translating
+      if (primaryCode === "en-IN") {
+          return { originalText: transcribedText, translatedText: transcribedText };
+      }
+
       const tClient = getTranslateClient();
       const [translation] = await tClient.translate(transcribedText, 'en');
       return {
-        originalText: transcribedText, // UI shows Native characters (Hindi/etc)
-        translatedText: translation    // AI still gets English meaning for better extraction
+        originalText: transcribedText,
+        translatedText: translation
       };
     } catch (translateError) {
-      console.error("[GCP Translate Error]:", translateError);
-      return {
-        originalText: transcribedText,
-        translatedText: transcribedText
-      };
+      return { originalText: transcribedText, translatedText: transcribedText };
     }
 
   } catch (error) {
     console.error("[GCP STT Error]:", error);
-    
-    if (error instanceof AppError) {
-      throw error;
-    }
-
-    throw new AppError("Audio transcription service is unavailable", 502, {
-      code: "TRANSCRIPTION_ERROR",
-      expose: false,
-      cause: error,
-    });
+    throw new AppError("Transcription failed", 502, { code: "TRANSCRIPTION_ERROR", cause: error });
   }
 };
 

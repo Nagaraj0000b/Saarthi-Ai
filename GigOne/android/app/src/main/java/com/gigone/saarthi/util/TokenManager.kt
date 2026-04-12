@@ -48,26 +48,34 @@ object TokenManager {
 
     // --- Profile Preferences ---
 
-    fun saveSelectedLanguages(ctx: Context, languages: Set<String>) =
-        prefs(ctx).edit().putStringSet("languages", languages).apply()
+    fun saveSelectedLanguages(ctx: Context, languages: Set<String>) {
+        prefs(ctx).edit().remove("languages").apply()
+        prefs(ctx).edit().putStringSet("languages", languages.toSet()).apply()
+    }
 
     fun getSelectedLanguages(ctx: Context): Set<String> =
         prefs(ctx).getStringSet("languages", setOf("English", "Hindi")) ?: setOf("English", "Hindi")
 
-    fun saveJobs(ctx: Context, jobs: Set<String>) =
-        prefs(ctx).edit().putStringSet("jobs", jobs).apply()
+    fun saveJobs(ctx: Context, jobs: Set<String>) {
+        prefs(ctx).edit().remove("jobs").apply()
+        prefs(ctx).edit().putStringSet("jobs", jobs.toSet()).apply()
+    }
 
     fun getJobs(ctx: Context): Set<String> =
         prefs(ctx).getStringSet("jobs", setOf()) ?: emptySet()
 
-    fun saveVehicles(ctx: Context, vehicles: Set<String>) =
-        prefs(ctx).edit().putStringSet("vehicles", vehicles).apply()
+    fun saveVehicles(ctx: Context, vehicles: Set<String>) {
+        prefs(ctx).edit().remove("vehicles").apply()
+        prefs(ctx).edit().putStringSet("vehicles", vehicles.toSet()).apply()
+    }
 
     fun getVehicles(ctx: Context): Set<String> =
         prefs(ctx).getStringSet("vehicles", setOf("Bike")) ?: setOf("Bike")
 
-    fun saveSkills(ctx: Context, skills: Set<String>) =
-        prefs(ctx).edit().putStringSet("skills", skills).apply()
+    fun saveSkills(ctx: Context, skills: Set<String>) {
+        prefs(ctx).edit().remove("skills").apply()
+        prefs(ctx).edit().putStringSet("skills", skills.toSet()).apply()
+    }
 
     fun getSkills(ctx: Context): Set<String> =
         prefs(ctx).getStringSet("skills", setOf("Bike & Scooter Driving")) ?: setOf("Bike & Scooter Driving")

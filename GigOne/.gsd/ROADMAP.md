@@ -26,27 +26,35 @@
 **Objective**: Integrate the sentiment analysis module. Analyze the user's mood response to determine score/summary and update state.
 
 ### Phase 4: Conversation Step 3 - Platform / Job Selection
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Agent acknowledges mood appropriately and asks which platform they worked on today (verifying against registered list).
 
 ### Phase 5: Conversation Step 4 - Earning Extraction
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Process user's response about platform, request earning amount, and extract earnings into state cleanly.
+**Plans:** 1 plans
+- [x] 5-PLAN.md — Process user's response about platform, request earning amount, and extract earnings into state cleanly.
 
 ### Phase 6: Conversation Step 5 - Hours Extraction
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Agent asks for hours worked and strictly extracts the numeric value into the state.
+**Plans:** 1 plans
+- [x] 6-PLAN.md — Process user's response about hours worked, extract the numerical amount into state cleanly.
 
 ### Phase 7: Conversation Step 6 - Final Summarization
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Agent generates final summary of the recorded shift data, incorporating the weather and traffic context for the *next* shift.
+**Plans:** 1 plans
+- [x] 07-01-PLAN.md — Generate final summary of the recorded shift data, incorporating the weather and traffic context for the *next* shift.
 
 ### Phase 8: Parallel Integration & Live Testing
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Hook up the new module to the Kotlin app frontend parameters, tested side-by-side with old chatbot.
+**Plans:** 1 plans
+- [x] 8-PLAN.md — Hook up the new LangGraph voice module to the Kotlin app frontend, tested side-by-side with the old chatbot.
 
 ### Phase 9: Sync to Backend Database & Legacy Cleanup
-**Status**: ⬜ Not Started
+**Status**: ✅ Complete
 **Objective**: Ensure shift and earning history updates reflect in the database properly, then safely delete old voice chat files.
 
 ---

@@ -75,6 +75,7 @@ const analyzeMoodText = async (text, { language, sourceStep = "mood" } = {}) => 
   const prompt = `
 You are a sentiment analysis module for gig worker wellbeing check-ins.
 Analyze ONLY the emotional state expressed in the text below.
+If the text is gibberish, meaningless nonsense, or lacks any clear emotion, you MUST set "moodLabel" to "invalid".
 ${languageInstruction}
 
 Text to analyze:
@@ -82,13 +83,14 @@ Text to analyze:
 
 Return ONLY valid JSON with exactly these fields:
 {
-  "moodLabel": "happy|neutral|tired|stressed|frustrated|excited",
+  "moodLabel": "happy|neutral|tired|stressed|frustrated|excited|invalid",
   "moodScore": <number from -1.0 to 1.0, where -1 is highly negative, 0 is neutral, 1 is positive>,
-  "summary": "one short summary sentence of their mood",
+  "summary": "one short summary sentence of their mood (or reason why invalid)",
   "suggestion": "one short supportive self-care suggestion",
   "confidence": <number from 0.0 to 1.0>
 }
   `.trim();
+
 
   try {
     const result = await getModel().generateContent({

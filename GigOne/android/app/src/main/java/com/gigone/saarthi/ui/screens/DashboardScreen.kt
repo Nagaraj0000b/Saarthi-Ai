@@ -80,7 +80,6 @@ fun DashboardScreen(
     val isRecommendationLoading: Boolean by vm.isRecommendationLoading.collectAsStateWithLifecycle()
     val recommendationError: String? by vm.recommendationError.collectAsStateWithLifecycle()
     val errorMessage: String? by vm.errorMessage.collectAsStateWithLifecycle()
-    val useV2Chat: Boolean by vm.useV2Chat.collectAsStateWithLifecycle()
 
     // ─── Error Handling ──────────────────────────────────────────────────────
     LaunchedEffect(errorMessage) {
@@ -191,21 +190,7 @@ fun DashboardScreen(
                         )
                     }
                     
-                    Spacer(modifier = Modifier.width(8.dp))
-                    
-                    Surface(
-                        shape = RoundedCornerShape(12.dp),
-                        color = if (useV2Chat) AppColors.Primary.copy(alpha = 0.2f) else Color(0x0DFFFFFF),
-                        modifier = Modifier.clickable { vm.toggleV2Chat(!useV2Chat) }
-                    ) {
-                        Text(
-                            if (useV2Chat) "V2" else "V1",
-                            color = if (useV2Chat) AppColors.Primary else AppColors.TextSecondary,
-                            fontSize = 14.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
-                        )
-                    }
+                    // V2 toggle removed per Phase 9
                 }
 
                 // Right side: Location + Profile

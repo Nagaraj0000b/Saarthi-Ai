@@ -7,6 +7,7 @@ data class AuthResponse(val token: String, val user: UserData)
 data class UserData(
     val id: String,
     val name: String,
+    val email: String? = null,
     val role: String,
     val skills: List<String> = emptyList(),
     val registeredJobs: List<String> = emptyList()

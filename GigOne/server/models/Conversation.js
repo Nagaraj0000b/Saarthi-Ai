@@ -52,7 +52,7 @@ const conversationSchema = new mongoose.Schema({
    */
   step: {
     type: String,
-    enum: ["greeting", "mood", "job", "earnings", "hours", "summary", "done", "ask_platform", "retry_platform", "ask_earnings", "retry_earnings", "ask_hours", "retry_hours", "complete"],
+    enum: ["greeting", "mood", "job", "earnings", "hours", "summary", "done", "ask_platform", "retry_platform", "ask_earnings", "retry_earnings", "ask_hours", "retry_hours", "complete", "waiting_for_mood", "platform_selection", "earnings_extraction", "hours_extraction", "final_summarization", "completed", "start"],
     default: "greeting",
   },
   /**

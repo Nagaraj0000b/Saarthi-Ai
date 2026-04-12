@@ -28,6 +28,12 @@ const userSchema = new mongoose.Schema({
   role:         { type: String, enum: ["user", "admin"], default: "user" },
   skills:       { type: [String], default: [] },
   registeredJobs: { type: [String], default: [] },
+  dailyTarget:  { type: Number, default: 1000 }, // ₹ daily earning goal, synced from Android
+  lastKnownLocation: {
+    lat: { type: Number },
+    lon: { type: Number },
+    updatedAt: { type: Date },
+  },
 }, { 
   timestamps: true,
   toJSON: {
