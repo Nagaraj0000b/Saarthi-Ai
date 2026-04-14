@@ -1,0 +1,29 @@
+{
+  "dataset_size": 50000,
+  "features_used": [
+    "gender",
+    "domain",
+    "job_type",
+    "platform",
+    "domain_experience_years",
+    "skill_level",
+    "is_location_based",
+    "city",
+    "temperature_celsius",
+    "humidity_percentage",
+    "congestion_percent",
+    "traffic_level",
+    "moodLabel",
+    "moodScore",
+    "hours_today",
+    "hours_last_3_days",
+    "consecutive_days"
+  ],
+  "earnings_metrics": {
+    "r2": 0.9812,
+    "rmse": 53.31
+  },
+  "burnout_metrics": {
+    "accuracy": 0.9345
+  }
+}
