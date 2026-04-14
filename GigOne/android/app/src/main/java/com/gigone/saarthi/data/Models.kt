@@ -2,19 +2,35 @@ package com.gigone.saarthi.data
 
 // ─── Auth models ──────────────────────────────────────────────────────────────
 data class LoginRequest(val email: String, val password: String, val role: String = "worker")
-data class RegisterRequest(val name: String, val email: String, val password: String, val role: String = "worker")
+data class RegisterRequest(val name: String, val email: String, val password: String, val gender: String, val role: String = "worker")
+
+data class JobInfo(
+    val platform: String,
+    val jobType: String,
+    val domain: String = ""
+)
+
+data class SkillInfo(
+    val name: String,
+    val yearsOfExperience: Int = 0,
+    val skillLevel: String = "Low"
+)
+
 data class AuthResponse(val token: String, val user: UserData)
 data class UserData(
     val id: String,
     val name: String,
     val email: String? = null,
     val role: String,
-    val skills: List<String> = emptyList(),
-    val registeredJobs: List<String> = emptyList()
+    val gender: String? = null,
+    val skills: List<SkillInfo> = emptyList(),
+    val registeredJobs: List<JobInfo> = emptyList()
 )
 data class UpdateProfileRequest(
-    val skills: List<String>? = null,
-    val registeredJobs: List<String>? = null
+    val name: String? = null,
+    val gender: String? = null,
+    val skills: List<SkillInfo>? = null,
+    val registeredJobs: List<JobInfo>? = null
 )
 data class UpdateProfileResponse(
     val success: Boolean,

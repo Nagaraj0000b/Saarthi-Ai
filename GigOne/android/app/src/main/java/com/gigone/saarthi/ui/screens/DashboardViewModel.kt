@@ -178,8 +178,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         try {
-            val jobsStr = TokenManager.getJobs(ctx).joinToString(",")
-            val skillsStr = TokenManager.getSkills(ctx).joinToString(",")
+            val jobsStr = TokenManager.getJobs(ctx).joinToString(",") { it.platform }
+            val skillsStr = TokenManager.getSkills(ctx).joinToString(",") { it.name }
             val response = chatApi.getJobRecommendations(loc.latitude, loc.longitude, jobsStr, skillsStr)
             _recommendation.value = response.data
         } catch (e: HttpException) {
@@ -204,8 +204,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 _errorMessage.value = null
                 
                 val location = getCurrentLocation()
-                val jobs = TokenManager.getJobs(ctx).toList()
-                val skills = TokenManager.getSkills(ctx).toList()
+                val jobs = TokenManager.getJobs(ctx).map { it.platform }
+                val skills = TokenManager.getSkills(ctx).map { it.name }
                 
                 val body = com.gigone.saarthi.data.StartSessionRequest(
                     language = _selectedLanguage.value,
@@ -290,8 +290,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val convIdBody = conversationId!!.toRequestBody("text/plain".toMediaType())
                 val langBody = _selectedLanguage.value.toRequestBody("text/plain".toMediaType())
                 
-                val jobs = TokenManager.getJobs(ctx).joinToString(",")
-                val skills = TokenManager.getSkills(ctx).joinToString(",")
+                val jobs = TokenManager.getJobs(ctx).joinToString(",") { it.platform }
+                val skills = TokenManager.getSkills(ctx).joinToString(",") { it.name }
                 val jobsBody = jobs.toRequestBody("text/plain".toMediaType())
                 val skillsBody = skills.toRequestBody("text/plain".toMediaType())
 

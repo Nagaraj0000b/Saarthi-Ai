@@ -92,10 +92,10 @@ const persistAutoSavedEarnings = async (userId, extractedData) => {
 };
 
 const getRawGreeting = asyncHandler(async (req, res) => {
-  const user = req.user ? await User.findById(req.user.userId).select("name") : null;
+  const user = req.user ? await User.findById(req.user.userId) : null;
   const language = typeof req.body.language === "string" ? req.body.language.trim() : "English";
-  const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
-  const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
+  const platforms = user?.registeredJobs || [];
+  const skills = user?.skills || [];
   
   const context = { platforms, skills };
   const greeting = await generateGreeting(user?.name || "buddy", context, language);
@@ -120,13 +120,13 @@ const getRawReply = asyncHandler(async (req, res) => {
   const language = typeof req.body.language === "string" ? req.body.language.trim() : "English";
   const nextState = req.body.state || "default";
   
-  // Fetch user name for personalized professional response
-  const user = req.user ? await User.findById(req.user.userId).select("name") : null;
+  // Fetch user profile for personalized professional response and skills
+  const user = req.user ? await User.findById(req.user.userId) : null;
 
   const context = {
     userName: user?.name || null,
-    platforms: Array.isArray(req.body.platforms) ? req.body.platforms : [],
-    skills: Array.isArray(req.body.skills) ? req.body.skills : [],
+    platforms: req.body.platforms || user?.registeredJobs || [],
+    skills: req.body.skills || user?.skills || [],
     dailyMood: req.body.dailyMood || null,
     extractedData: req.body.extractedData || {},
     weather: req.body.weather || null,
@@ -138,8 +138,9 @@ const getRawReply = asyncHandler(async (req, res) => {
 });
 
 const extractRawData = asyncHandler(async (req, res) => {
+  const user = req.user ? await User.findById(req.user.userId) : null;
   const text = req.body.text || "";
-  const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
+  const platforms = req.body.platforms || user?.registeredJobs || [];
   
   const result = await extractGigData(text, platforms);
   res.json(result);
@@ -147,11 +148,11 @@ const extractRawData = asyncHandler(async (req, res) => {
 
 const startChatV2 = asyncHandler(async (req, res) => {
   const userId = req.user.userId;
-  const user = await User.findById(userId).select("name");
+  const user = await User.findById(userId);
   
   const language = typeof req.body.language === "string" ? req.body.language.trim() : "English";
-  const platforms = Array.isArray(req.body.platforms) ? req.body.platforms : [];
-  const skills = Array.isArray(req.body.skills) ? req.body.skills : [];
+  const platforms = user.registeredJobs || [];
+  const skills = user.skills || [];
 
   const conversation = await Conversation.create({
     userId,
@@ -208,14 +209,15 @@ const replyChatV2 = asyncHandler(async (req, res) => {
     if (!conversation) {
       return res.status(404).json({ message: "Conversation not found" });
     }
+    
+    const user = await User.findById(req.user.userId);
+    const platforms = user.registeredJobs || [];
+    const skills = user.skills || [];
 
     let transcriptionLanguage = typeof req.body.language === "string" ? req.body.language.trim() : conversation.language || "English";
     
     const transcriptionResult = await transcribeAudio(filePath, transcriptionLanguage);
     const userText = transcriptionResult?.originalText || transcriptionResult?.translatedText || "";
-
-    const platforms = typeof req.body.platforms === "string" ? req.body.platforms.split(",").filter(Boolean) : (Array.isArray(req.body.platforms) ? req.body.platforms : []);
-    const skills = typeof req.body.skills === "string" ? req.body.skills.split(",").filter(Boolean) : (Array.isArray(req.body.skills) ? req.body.skills : []);
 
     const payload = {
       user_token: (req.headers.authorization || "").replace(/^Bearer\s+/i, ""),

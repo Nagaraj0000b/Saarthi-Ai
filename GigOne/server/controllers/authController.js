@@ -26,6 +26,7 @@ const register = asyncHandler(async (req, res) => {
   const name = ensureNonEmptyString(req.body.name, "name");
   const email = ensureEmail(req.body.email);
   const password = ensureMinLengthString(req.body.password, "password", 6);
+  const gender = req.body.gender || "Male"; // Default to Male if not provided
 
   const existingUser = await User.findOne({ email });
   if (existingUser) {
@@ -33,14 +34,16 @@ const register = asyncHandler(async (req, res) => {
   }
 
   const passwordHash = await bcrypt.hash(password, 10);
-  const user = await User.create({ name, email, passwordHash });
+  const user = await User.create({ name, email, passwordHash, gender });
 
   res.status(201).json({
     token: generateToken(user),
     user: {
       id: user._id,
       name: user.name,
+      email: user.email,
       role: user.role,
+      gender: user.gender,
       skills: user.skills,
       registeredJobs: user.registeredJobs,
     },
@@ -72,7 +75,9 @@ const login = asyncHandler(async (req, res) => {
     user: {
       id: user._id,
       name: user.name,
+      email: user.email,
       role: user.role,
+      gender: user.gender,
       skills: user.skills,
       registeredJobs: user.registeredJobs,
     },
@@ -94,6 +99,7 @@ const getProfile = asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      gender: user.gender,
       skills: user.skills,
       registeredJobs: user.registeredJobs,
     },
@@ -101,11 +107,12 @@ const getProfile = asyncHandler(async (req, res) => {
 });
 
 const updateProfile = asyncHandler(async (req, res) => {
-  const { name, skills, registeredJobs } = req.body;
+  const { name, gender, skills, registeredJobs } = req.body;
   const userId = req.user.userId;
 
   const updateData = {};
   if (name !== undefined) updateData.name = name;
+  if (gender !== undefined) updateData.gender = gender;
   if (skills !== undefined) updateData.skills = skills;
   if (registeredJobs !== undefined) updateData.registeredJobs = registeredJobs;
 
@@ -126,6 +133,7 @@ const updateProfile = asyncHandler(async (req, res) => {
       name: user.name,
       email: user.email,
       role: user.role,
+      gender: user.gender,
       skills: user.skills,
       registeredJobs: user.registeredJobs,
     },

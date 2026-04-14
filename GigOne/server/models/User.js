@@ -26,8 +26,22 @@ const userSchema = new mongoose.Schema({
   passwordHash: { type: String }, // Optional to support OAuth-only accounts
   googleId:     { type: String }, // NEW: Correlation ID for Google OAuth users
   role:         { type: String, enum: ["user", "admin"], default: "user" },
-  skills:       { type: [String], default: [] },
-  registeredJobs: { type: [String], default: [] },
+  gender:       { type: String, enum: ["Male", "Female", "Other"] }, // NEW: Added for ML Engine
+  
+  // Specific gig platforms they work on
+  registeredJobs: [{
+    platform: { type: String, required: true }, // e.g., "Zomato", "Upwork"
+    jobType: { type: String, required: true },  // e.g., "Food Delivery", "Software Development"
+    domain: { type: String }                    // e.g., "Location_Transport_Delivery"
+  }],
+  
+  // Specific skills and years of experience
+  skills: [{
+    name: { type: String, required: true },     // e.g., "Navigation", "Data Science"
+    yearsOfExperience: { type: Number, default: 0, min: 0 },
+    skillLevel: { type: String, enum: ["Low", "Medium", "High"], default: "Low" }
+  }],
+  
   dailyTarget:  { type: Number, default: 1000 }, // ₹ daily earning goal, synced from Android
   lastKnownLocation: {
     lat: { type: Number },

@@ -5,6 +5,8 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.gigone.saarthi.data.ApiClient
 import com.gigone.saarthi.data.AuthApi
+import com.gigone.saarthi.data.JobInfo
+import com.gigone.saarthi.data.SkillInfo
 import com.gigone.saarthi.util.TokenManager
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -58,8 +60,8 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
             try {
                 val response = authApi.getProfile()
                 val user = response.user
-                TokenManager.saveSkills(ctx, user.skills.toSet())
-                TokenManager.saveJobs(ctx, user.registeredJobs.toSet())
+                TokenManager.saveSkills(ctx, user.skills)
+                TokenManager.saveJobs(ctx, user.registeredJobs)
                 TokenManager.saveUserName(ctx, user.name)
                 user.email?.let { TokenManager.saveUserEmail(ctx, it) }
             } catch (e: Exception) {
@@ -72,7 +74,7 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
      * Auto-save variant: saves to local storage immediately, then debounces
      * the API call by 1 second. Safe to call on every chip add/remove.
      */
-    fun syncProfileDebounced(skills: Set<String>, jobs: Set<String>) {
+    fun syncProfileDebounced(skills: List<SkillInfo>, jobs: List<JobInfo>) {
         // Persist locally RIGHT NOW — back-navigation will never lose data
         TokenManager.saveSkills(ctx, skills)
         TokenManager.saveJobs(ctx, jobs)
@@ -88,22 +90,22 @@ class ProfileViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Synchronize skills and jobs with the backend immediately.
      */
-    fun syncProfile(skills: Set<String>, jobs: Set<String>) {
+    fun syncProfile(skills: List<SkillInfo>, jobs: List<JobInfo>) {
         globalSyncJob?.cancel()
         globalSyncJob = appScope.launch {
             performSync(skills, jobs)
         }
     }
 
-    private suspend fun performSync(skills: Set<String>, jobs: Set<String>) {
+    private suspend fun performSync(skills: List<SkillInfo>, jobs: List<JobInfo>) {
         _isLoading.value = true
         _isSuccess.value = false
         _errorMessage.value = null
 
         try {
             val request = com.gigone.saarthi.data.UpdateProfileRequest(
-                skills = skills.toList(),
-                registeredJobs = jobs.toList()
+                skills = skills,
+                registeredJobs = jobs
             )
             authApi.updateProfile(request)
             _isSuccess.value = true

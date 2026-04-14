@@ -26,6 +26,7 @@ import com.gigone.saarthi.ui.theme.AppColors
 import com.gigone.saarthi.util.TokenManager
 import kotlinx.coroutines.launch
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SignUpScreen(
     onSignUpSuccess: () -> Unit,
@@ -37,6 +38,8 @@ fun SignUpScreen(
     var name by remember { mutableStateOf("") }
     var email by remember { mutableStateOf("") }
     var password by remember { mutableStateOf("") }
+    var gender by remember { mutableStateOf("") }
+    var genderExpanded by remember { mutableStateOf(false) }
     var isLoading by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf<String?>(null) }
 
@@ -114,6 +117,48 @@ fun SignUpScreen(
                 )
 
                 Spacer(Modifier.height(12.dp))
+                
+                // Gender Dropdown
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = gender,
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Gender", color = AppColors.TextSecondary) },
+                        modifier = Modifier.fillMaxWidth(),
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = genderExpanded) },
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedContainerColor = AppColors.BgDeep, unfocusedContainerColor = AppColors.BgDeep,
+                            focusedBorderColor = AppColors.Primary, unfocusedBorderColor = AppColors.BorderSubtle,
+                            focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
+                        ),
+                        shape = RoundedCornerShape(8.dp)
+                    )
+                    // Invisible box to catch clicks
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(androidx.compose.ui.graphics.Color.Transparent)
+                            .clickable { genderExpanded = true }
+                    )
+                    DropdownMenu(
+                        expanded = genderExpanded,
+                        onDismissRequest = { genderExpanded = false },
+                        modifier = Modifier.background(AppColors.BgCard).fillMaxWidth(0.85f)
+                    ) {
+                        listOf("Male", "Female", "Other").forEach { selectionOption ->
+                            DropdownMenuItem(
+                                text = { Text(selectionOption, color = AppColors.TextPrimary) },
+                                onClick = {
+                                    gender = selectionOption
+                                    genderExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Spacer(Modifier.height(12.dp))
 
                 // Password
                 OutlinedTextField(
@@ -145,7 +190,7 @@ fun SignUpScreen(
 
                 Button(
                     onClick = {
-                        if (name.isBlank() || email.isBlank() || password.isBlank()) {
+                        if (name.isBlank() || email.isBlank() || password.isBlank() || gender.isBlank()) {
                             errorMessage = "Please fill in all fields"
                             return@Button
                         }
@@ -154,9 +199,10 @@ fun SignUpScreen(
                             errorMessage = null
                             try {
                                 val api = ApiClient.create<AuthApi>()
-                                val response = api.register(RegisterRequest(name, email.trim(), password))
+                                val response = api.register(RegisterRequest(name, email.trim(), password, gender))
                                 TokenManager.saveToken(context, response.token)
                                 TokenManager.saveUserName(context, response.user.name.split(" ").first())
+                                response.user.gender?.let { TokenManager.saveUserGender(context, it) }
                                 onSignUpSuccess()
                             } catch (e: retrofit2.HttpException) {
                                 errorMessage = "Registration failed. This email might already be in use."

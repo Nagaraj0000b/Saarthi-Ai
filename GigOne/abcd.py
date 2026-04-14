@@ -1,12 +1,13 @@
 import requests
 import json
 import time
+import sys
 
 # 1. DOUBLE CHECK THIS matches the latest Kaggle output!
 NGROK_URL = "https://unsating-uncorruptedly-madeline.ngrok-free.dev"
 
-def ask_gemma_safe(prompt):
-    endpoint = f"{NGROK_URL}/api/chat"
+def ask_gemma_safe(prompt, ngrok_url):
+    endpoint = f"{ngrok_url}/api/chat"
     headers = {
         "Content-Type": "application/json",
         "ngrok-skip-browser-warning": "true" 
@@ -17,7 +18,7 @@ def ask_gemma_safe(prompt):
         "stream": True
     }
 
-    print(f"--- CONNECTING TO: {NGROK_URL} ---")
+    print(f"--- CONNECTING TO: {ngrok_url} ---")
     print("(Waiting for Gemma to load weights... this can take 90+ seconds)")
 
     try:
@@ -43,4 +44,10 @@ def ask_gemma_safe(prompt):
         print(f"\n❌ Unexpected Error: {e}")
 
 if __name__ == "__main__":
-    ask_gemma_safe("Hi Tell me about your self .")
+    if len(sys.argv) < 2:
+        print("❌ Error: Please provide the ngrok URL as a command-line argument.")
+        print("   Usage: python abcd.py https://your-ngrok-url.ngrok-free.dev")
+        sys.exit(1)
+
+    NGROK_URL = sys.argv[1]
+    ask_gemma_safe("Hi Tell me about your self .", NGROK_URL)
