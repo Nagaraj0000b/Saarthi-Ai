@@ -15,11 +15,11 @@ const TYPE_COOLDOWNS = {
   environmental        : 6  * 60 * 60 * 1000, 
   earnings_optimization: 24 * 60 * 60 * 1000, 
   burnout              : 24 * 60 * 60 * 1000, 
-  daily_target         : 24 * 60 * 60 * 1000, // Only celebrate once per day
+  daily_target         : 5 * 60 * 1000, // Allow multiple celebrations per day (5 min cooldown)
 };
 
 const GLOBAL_SPACING_MS = 5 * 60 * 1000; // 5 minutes between any nudges
-const DAILY_CAP = 3; // Max 3 nudges/day (one per type)
+const DAILY_CAP = 10; // Max 10 nudges/day to allow for multiple celebratory/critical nudges
 
 // IST offset: UTC+5:30
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
