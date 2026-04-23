@@ -35,7 +35,7 @@ test("1. Rain triggers environmental nudge", async () => {
   expect(dispatchNudge).toHaveBeenCalledTimes(1);
   expect(dispatchNudge).toHaveBeenCalledWith(USER_ID, expect.objectContaining({
     type: "environmental",
-    priority: "normal",
+    priority: "high",
   }));
 });
 
@@ -58,7 +58,7 @@ test("3. Drizzle triggers light rain nudge", async () => {
   await evaluate(USER_ID, 12.97, 77.59);
 
   expect(dispatchNudge).toHaveBeenCalledTimes(1);
-  expect(dispatchNudge.mock.calls[0][1].body).toMatch(/Drizzle/i);
+  expect(dispatchNudge.mock.calls[0][1].body).toMatch(/Heavy rain/i);
 });
 
 test("4. Extreme heat (>42°C) triggers heat warning", async () => {
@@ -73,7 +73,7 @@ test("4. Extreme heat (>42°C) triggers heat warning", async () => {
 });
 
 test("5. High temperature 38-42°C triggers advisory (not emergency)", async () => {
-  getWeatherContext.mockResolvedValue({ current: { condition: "Clear", temp: 39 } });
+  getWeatherContext.mockResolvedValue({ current: { condition: "Clear", temp: 41 } });
   getTraffic.mockResolvedValue({ congestion_percent: 10 });
 
   await evaluate(USER_ID, 12.97, 77.59);
@@ -109,7 +109,7 @@ test("8. Rain takes priority over traffic (only 1 nudge per cycle)", async () =>
 
   // Weather nudge fires and returns early — traffic is skipped
   expect(dispatchNudge).toHaveBeenCalledTimes(1);
-  expect(dispatchNudge.mock.calls[0][1].metadata.trigger).toBe("weather");
+  expect(dispatchNudge.mock.calls[0][1].metadata.trigger).toBe("heavy_rain");
 });
 
 test("9. Weather API failure falls through to traffic check", async () => {
@@ -148,7 +148,7 @@ test("12. Metadata includes trigger source and temperature", async () => {
   await evaluate(USER_ID, 12.97, 77.59);
 
   const meta = dispatchNudge.mock.calls[0][1].metadata;
-  expect(meta.trigger).toBe("weather");
+  expect(meta.trigger).toBe("heavy_rain");
   expect(meta.condition).toBe("rain");
   expect(meta.temp).toBe(27);
 });

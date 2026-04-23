@@ -6,15 +6,13 @@
 
 const express = require("express");
 const router = express.Router();
-const passport = require("passport");
+const auth = require("../middleware/auth");
 const {
   getActiveNudges,
   markRead,
   dismiss,
   syncDailyTarget,
 } = require("../controllers/nudgeController");
-
-const auth = passport.authenticate("jwt", { session: false });
 
 // GET  /api/nudges           → Fetch pending nudges for polling
 router.get("/", auth, getActiveNudges);

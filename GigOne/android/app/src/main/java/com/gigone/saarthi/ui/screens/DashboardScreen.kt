@@ -12,7 +12,13 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.animation.*
+import androidx.compose.animation.core.*
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.shadow
+
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material.icons.filled.LocationOn
@@ -122,6 +128,13 @@ fun DashboardScreen(
 
     // Load recommendations on first launch (Cached by ViewModel)
     LaunchedEffect(Unit) {
+        // Request notification permission right on launch for Android 13+
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
+            if (androidx.core.content.ContextCompat.checkSelfPermission(ctx, Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                locationLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+            }
+        }
+
         if (recommendation == null && !isRecommendationLoading) {
             if (!vm.hasLocationPermission()) {
                 locationLauncher.launch(
@@ -250,17 +263,98 @@ fun DashboardScreen(
                 }
             }
 
+            // ── ACTIVE NUDGES ────────────────────────────
+            val activeNudges by vm.activeNudges.collectAsStateWithLifecycle()
+            if (activeNudges.isNotEmpty()) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 16.dp, top = 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Only show the top 3 nudges to prevent flooding the screen
+                    activeNudges.take(3).forEach { nudge ->
+                        key(nudge._id) {
+                            var visible by remember { mutableStateOf(false) }
+                            LaunchedEffect(Unit) {
+                                visible = true
+                            }
+
+                            AnimatedVisibility(
+                                visible = visible,
+                                enter = slideInHorizontally(initialOffsetX = { it / 2 }) + fadeIn(),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val isUrgent = nudge.priority == "urgent"
+                                val primaryColor = if (isUrgent) AppColors.Error else AppColors.Primary
+                                val gradient = Brush.linearGradient(
+                                    colors = listOf(
+                                        primaryColor.copy(alpha = 0.2f),
+                                        primaryColor.copy(alpha = 0.05f)
+                                    )
+                                )
+
+                                Surface(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .shadow(elevation = 6.dp, shape = RoundedCornerShape(16.dp)),
+                                    shape = RoundedCornerShape(16.dp),
+                                    color = Color.Transparent,
+                                    border = BorderStroke(1.5.dp, AppColors.Primary.copy(alpha = 0.3f))
+                                ) {
+                                    Box(
+                                        modifier = Modifier
+                                            .background(gradient)
+                                            .padding(start = 16.dp, top = 16.dp, bottom = 16.dp, end = 8.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Text(nudge.emoji ?: "🔔", fontSize = 30.sp)
+                                            Spacer(Modifier.width(14.dp))
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    nudge.title ?: "Notification",
+                                                    color = AppColors.TextPrimary,
+                                                    fontWeight = FontWeight.ExtraBold,
+                                                    fontSize = 16.sp
+                                                )
+                                                Text(
+                                                    nudge.body ?: "",
+                                                    color = AppColors.TextSecondary,
+                                                    fontSize = 14.sp,
+                                                    lineHeight = 20.sp
+                                                )
+                                            }
+                                            IconButton(
+                                                onClick = { vm.dismissNudge(nudge._id) },
+                                                modifier = Modifier.size(36.dp)
+                                            ) {
+                                                Icon(
+                                                    Icons.Default.Close,
+                                                    contentDescription = "Dismiss",
+                                                    tint = AppColors.TextSecondary,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             // ── RECOMMENDATION CARD (ML-Powered) ────────────────────────────
             Surface(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 12.dp)
+                    .padding(start = 16.dp, end = 16.dp, top = 12.dp, bottom = 8.dp)
                     .clickable { onJobRecommendationsClick() },
                 shape = RoundedCornerShape(16.dp),
                 color = AppColors.BgCard,
                 border = BorderStroke(1.dp, AppColors.BorderSubtle)
             ) {
-                Column(modifier = Modifier.padding(16.dp)) {
+                Column(modifier = Modifier.padding(12.dp)) {
                     if (isRecommendationLoading) {
                         // Loading state
                         Row(
@@ -289,9 +383,9 @@ fun DashboardScreen(
                             Text(
                                 "BEST JOB RIGHT NOW",
                                 color = AppColors.Accent,
-                                fontSize = 14.sp,
+                                fontSize = 12.sp,
                                 fontWeight = FontWeight.ExtraBold,
-                                letterSpacing = 1.sp
+                                letterSpacing = 0.5.sp
                             )
                             Surface(
                                 color = AppColors.Primary.copy(alpha = 0.15f),
@@ -300,14 +394,14 @@ fun DashboardScreen(
                                 Text(
                                     if (data.engine == "ml_xgboost_v1") "AI ⚡" else "RULES",
                                     color = AppColors.Primary,
-                                    fontSize = 14.sp,
+                                    fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
                                     modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
                                 )
                             }
                         }
 
-                        Spacer(Modifier.height(10.dp))
+                        Spacer(Modifier.height(8.dp))
 
                         // ── TOP RECOMMENDATION ──
                         if (compatibleJobs.isNotEmpty()) {
@@ -321,7 +415,7 @@ fun DashboardScreen(
                                 Row(
                                     modifier = Modifier
                                         .fillMaxWidth()
-                                        .padding(12.dp),
+                                        .padding(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     // Job Icon
@@ -334,8 +428,8 @@ fun DashboardScreen(
                                             contentDescription = topJob.job,
                                             tint = AppColors.Primary,
                                             modifier = Modifier
-                                                .padding(8.dp)
-                                                .size(24.dp)
+                                                .padding(4.dp)
+                                                .size(20.dp)
                                         )
                                     }
                                     Spacer(Modifier.width(12.dp))
@@ -343,7 +437,7 @@ fun DashboardScreen(
                                         Text(
                                             topJob.job,
                                             color = AppColors.TextPrimary,
-                                            fontSize = 14.sp,
+                                            fontSize = 13.sp,
                                             fontWeight = FontWeight.ExtraBold,
                                             maxLines = 1,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis
@@ -352,21 +446,21 @@ fun DashboardScreen(
                                             Text(
                                                 topJob.jobType!!,
                                                 color = AppColors.TextSecondary,
-                                                fontSize = 12.sp,
+                                                fontSize = 11.sp,
                                                 fontWeight = FontWeight.SemiBold,
                                                 maxLines = 1,
                                                 overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                                modifier = Modifier.padding(top = 1.dp)
+                                                modifier = Modifier.padding(top = 0.dp)
                                             )
                                         }
                                         Text(
                                             topJob.reason.ifEmpty { "Best earning potential" },
                                             color = AppColors.Accent,
-                                            fontSize = 12.sp,
+                                            fontSize = 11.sp,
                                             fontWeight = FontWeight.Medium,
                                             maxLines = 1,
                                             overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
-                                            modifier = Modifier.padding(top = 1.dp)
+                                            modifier = Modifier.padding(top = 0.dp)
                                         )
                                     }
                                     // Earning badge
@@ -374,13 +468,13 @@ fun DashboardScreen(
                                         Text(
                                             "₹${topJob.finalScore.toInt()}",
                                             color = AppColors.Accent,
-                                            fontSize = 18.sp,
+                                            fontSize = 16.sp,
                                             fontWeight = FontWeight.ExtraBold
                                         )
                                         Text(
                                             "/hr",
                                             color = AppColors.TextSecondary,
-                                            fontSize = 14.sp
+                                            fontSize = 12.sp
                                         )
                                     }
                                 }
@@ -429,6 +523,8 @@ fun DashboardScreen(
                     isRefreshing = isRecommendationLoading,
                     onRefresh = { 
                         haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        vm.loadNudges() // <-- Actually fetch new nudges from backend!
+                        
                         if (vm.hasLocationPermission()) {
                             vm.refreshLocation()
                             vm.loadRecommendations(onLocationDisabled = { gpsLauncher.launch(it) })

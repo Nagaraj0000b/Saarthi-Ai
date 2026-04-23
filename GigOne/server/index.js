@@ -67,21 +67,29 @@ const bootstrap = async () => {
     shutdown("Uncaught exception", error);
   });
 
-  await connectDB();
+  try {
+    await connectDB();
+  } catch (dbError) {
+    console.error("Database connection failed during bootstrap:", dbError);
+    process.exit(1);
+  }
 
-  server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT} (bound to 0.0.0.0)`);
+  try {
+    server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT} (bound to 0.0.0.0)`);
 
-    // ── Start Nudge Engine background jobs ─────────────────────────
-    try {
-      require("./jobs/nightlyNudgeScheduler").start();
-      require("./services/nudgeEvaluators/environmentalNudgeEvaluator").startPolling();
-      require("./services/nudgeEvaluators/surgeNudgeEvaluator").startPolling();
-      console.log("Nudge Engine: All background jobs started.");
-    } catch (err) {
-      console.warn("Nudge Engine: Failed to start some jobs:", err.message);
-    }
-  });
+      // ── Nudge Engine: only environmental polling ────────────────────────
+      try {
+        require("./services/nudgeEvaluators/environmentalNudgeEvaluator").startPolling();
+        console.log("Nudge Engine: Environmental polling started.");
+      } catch (err) {
+        console.warn("Nudge Engine: Failed to start environmental polling:", err.message);
+      }
+    });
+  } catch (listenError) {
+    console.error("Server failed to listen on port ${PORT}:", listenError);
+    process.exit(1);
+  }
 
   return server;
 };

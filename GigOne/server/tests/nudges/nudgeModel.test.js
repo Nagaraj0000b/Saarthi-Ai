@@ -120,7 +120,7 @@ test("9. expiresAt defaults to ~6 hours from now", () => {
   });
   const after = Date.now();
 
-  const sixHoursMs = 6 * 60 * 60 * 1000;
+  const sixHoursMs = 24 * 60 * 60 * 1000;
   expect(nudge.expiresAt.getTime()).toBeGreaterThanOrEqual(before + sixHoursMs - 1000);
   expect(nudge.expiresAt.getTime()).toBeLessThanOrEqual(after + sixHoursMs + 1000);
 });

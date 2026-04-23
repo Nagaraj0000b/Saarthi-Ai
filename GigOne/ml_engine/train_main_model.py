@@ -19,21 +19,10 @@ df = pd.read_csv(DATA_PATH)
 # --- 1. Data Pre-processing ---
 # Columns to convert from text to numbers
 categorical_cols = [
-    'gender', 'domain', 'job_type', 'platform', 
-    'primary_skill', 'skill_level', 'city', 
+    'gender', 'domain', 'job_type', 'platform',
+    'primary_skill', 'skill_level', 'city',
     'weather_condition', 'traffic_level', 'moodLabel'
 ]
-
-encoders = {}
-print("Encoding categorical variables...")
-for col in categorical_cols:
-    le = LabelEncoder()
-    df[col] = le.fit_transform(df[col].astype(str))
-    encoders[col] = le
-
-# Save encoders for use in the real app
-with open(os.path.join(MODEL_DIR, 'saarthi_encoders.pkl'), 'wb') as f:
-    pickle.dump(encoders, f)
 
 # Define Features (What the AI looks at)
 feature_cols = [
@@ -49,6 +38,23 @@ X = df[feature_cols]
 print("\n--- Training Earnings Prediction Model (XGBoost Regressor) ---")
 y_earnings = df['target_earning']
 X_train_e, X_test_e, y_train_e, y_test_e = train_test_split(X, y_earnings, test_size=0.2, random_state=42)
+
+# Encode categorical variables separately for train and test to prevent leakage
+encoders = {}
+print("Encoding categorical variables...")
+for col in categorical_cols:
+    le = LabelEncoder()
+    # Fit only on training data
+    le.fit(X_train_e[col].astype(str))
+    encoders[col] = le
+
+    # Transform both
+    X_train_e[col] = le.transform(X_train_e[col].astype(str))
+    X_test_e[col] = le.transform(X_test_e[col].astype(str))
+
+# Save encoders for use in the real app
+with open(os.path.join(MODEL_DIR, 'saarthi_encoders.pkl'), 'wb') as f:
+    pickle.dump(encoders, f)
 
 model_earnings = xgb.XGBRegressor(
     n_estimators=500,
@@ -74,10 +80,16 @@ model_earnings.save_model(os.path.join(MODEL_DIR, 'saarthi_earnings_model.json')
 print("\n--- Training Burnout Risk Model (XGBoost Classifier) ---")
 # Encode the target burnout labels
 le_burnout = LabelEncoder()
-y_burnout = le_burnout.fit_transform(df['burnout_risk'])
-encoders['burnout_risk'] = le_burnout
-
+# Use a separate split for burnout to maintain consistency with original structure, but avoid leakage if we were encoding features
+y_burnout = df['burnout_risk']
 X_train_b, X_test_b, y_train_b, y_test_b = train_test_split(X, y_burnout, test_size=0.2, random_state=42)
+
+# Fit LabelEncoder ONLY on training target to prevent leakage
+le_burnout.fit(y_train_b.astype(str))
+y_train_b = le_burnout.transform(y_train_b.astype(str))
+y_test_b = le_burnout.transform(y_test_b.astype(str))
+
+encoders['burnout_risk'] = le_burnout
 
 model_burnout = xgb.XGBClassifier(
     n_estimators=300,

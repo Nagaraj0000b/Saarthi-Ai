@@ -44,7 +44,7 @@ afterEach(() => {
 
 test("1. Block nudge at 11 PM IST (quiet hours)", async () => {
   setISTHour(23);
-  const result = await throttle.canSendNudge(USER_ID, "environmental");
+  const result = await throttle.canSendNudge(USER_ID, "surge");
   expect(result.allowed).toBe(false);
   expect(result.reason).toMatch(/Quiet hours/);
 });
@@ -91,10 +91,11 @@ test("6. Allow nudge at 9:55 PM IST (just before cutoff)", async () => {
 
 test("7. Block if another nudge was sent 5 min ago (15-min spacing)", async () => {
   setISTHour(12);
+  Nudge.findOne.mockReturnValueOnce(mockLean(null)); // global spacing OK
   Nudge.findOne.mockReturnValueOnce(mockLean({
     createdAt: new Date(Date.now() - 5 * 60 * 1000), // 5 min ago
   }));
-  const result = await throttle.canSendNudge(USER_ID, "environmental");
+  const result = await throttle.canSendNudge(USER_ID, "surge");
   expect(result.allowed).toBe(false);
   expect(result.reason).toMatch(/Global spacing/);
 });
@@ -111,10 +112,11 @@ test("8. Allow if last nudge was 20 min ago (past 15-min spacing)", async () => 
 
 test("9. Block if nudge was sent exactly 14 min ago", async () => {
   setISTHour(10);
+  Nudge.findOne.mockReturnValueOnce(mockLean(null)); // global spacing OK
   Nudge.findOne.mockReturnValueOnce(mockLean({
     createdAt: new Date(Date.now() - 14 * 60 * 1000),
   }));
-  const result = await throttle.canSendNudge(USER_ID, "daily_target");
+  const result = await throttle.canSendNudge(USER_ID, "surge");
   expect(result.allowed).toBe(false);
   expect(result.reason).toMatch(/Global spacing/);
 });
@@ -138,7 +140,7 @@ test("11. Allow surge nudge if last surge was 90 min ago (1h cooldown)", async (
   Nudge.findOne
     .mockReturnValueOnce(mockLean(null))  // global spacing OK
     .mockReturnValueOnce(mockLean(null)); // per-type: no surge within 1h
-  Nudge.countDocuments.mockResolvedValue(3);
+  Nudge.countDocuments.mockResolvedValue(2);
   const result = await throttle.canSendNudge(USER_ID, "surge");
   expect(result.allowed).toBe(true);
 });

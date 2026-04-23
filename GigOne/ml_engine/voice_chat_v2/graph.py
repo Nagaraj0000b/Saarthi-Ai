@@ -25,7 +25,7 @@ def start_router(state: VoiceChatState) -> str:
 def create_graph():
     """Initializes the StateGraph holding the conversational flow logic."""
     workflow = StateGraph(VoiceChatState)
-    
+
     # Nodes
     workflow.add_node("greeting_node", greeting_node)
     workflow.add_node("mood_node", mood_node)
@@ -34,21 +34,20 @@ def create_graph():
     workflow.add_node("hours_node", hours_node)
     workflow.add_node("final_summary_node", final_summary_node)
     workflow.add_node("retry_node", retry_node)
-    
+
     # Starting Router
     workflow.add_conditional_edges(START, start_router)
-    
-    # Each node completes its task and waits for the NEXT user message
-    # (represented by returning to the user via the frontend calling invoke() again)
+
+    # Flow Logic
+    # Most nodes return to END because they expect a new user input via a new invoke() call.
     workflow.add_edge("greeting_node", END)
     workflow.add_edge("mood_node", END)
     workflow.add_edge("platform_node", END)
     workflow.add_edge("earnings_node", END)
-    
-    # Hours node flows directly into final summary node
+    workflow.add_edge("retry_node", END)
+
+    # Hours node flows directly into final summary node without waiting for new input
     workflow.add_edge("hours_node", "final_summary_node")
     workflow.add_edge("final_summary_node", END)
-    
-    workflow.add_edge("retry_node", END)
-    
+
     return workflow.compile()

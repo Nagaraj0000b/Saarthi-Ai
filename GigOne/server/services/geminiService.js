@@ -1,64 +1,67 @@
 /**
- * @fileoverview Gemini AI service for standalone natural language processing tasks using GCP Vertex AI.
+ * @fileoverview Gemini AI service using new @google/genai SDK.
+ * Priority: Vertex AI via credential.json → Google AI Studio via GEMINI_API_KEY
  */
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { VertexAI } = require("@google-cloud/vertexai");
+const { GoogleGenAI } = require("@google/genai");
 const path = require("path");
-const fs = require("fs");
+const fs   = require("fs");
 const AppError = require("../utils/appError");
 
-let model;
+let ai;
+let activeModel;
 
-const getModel = () => {
-  if (!model) {
+const VERTEX_MODEL   = "gemini-2.5-flash";
+const AISTUDIO_MODEL = "google/gemma-4-31b-it";
+
+const getClient = () => {
+  if (!ai) {
     const keyFilename = path.join(__dirname, "..", "credential.json");
-    
-    // 1. Prioritize Vertex AI (Uses GCP Credits/Project Billing)
+
+    // 1. Prioritize Vertex AI (GCP Credits) via service account
     if (fs.existsSync(keyFilename)) {
       try {
         const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
-        const projectId = credentials.project_id;
-        const location = "us-central1";
-
-        const vertexAI = new VertexAI({
-          project: projectId,
-          location: location,
-          keyFilename: keyFilename,
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+        ai = new GoogleGenAI({
+          vertexai : true,
+          project  : credentials.project_id,
+          location : "us-central1",
         });
-
-        model = vertexAI.getGenerativeModel({
-          model: "gemini-2.5-flash",
-        });
-        console.log("Using Vertex AI (GCP Credits) for Gemini");
-        return model;
+        activeModel = VERTEX_MODEL;
+        console.log("Using Vertex AI (GCP Credits) for Gemini —", activeModel);
+        return ai;
       } catch (error) {
-        console.warn("Vertex AI initialization failed, attempting API Key backup:", error.message);
+        console.warn("Vertex AI init failed, falling back to AI Studio:", error.message);
       }
     }
 
-    // 2. Fallback to Google AI SDK (Free Tier)
+    // 2. Fallback to Google AI Studio (free tier)
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        console.log("Using Google AI SDK (Free Tier) for Gemini");
-        return model;
-      } catch (error) {
-        throw new AppError("Failed to initialize any Gemini provider", 500, {
-          code: "AI_INIT_ERROR",
-          cause: error,
-        });
-      }
+      ai = new GoogleGenAI({ apiKey });
+      activeModel = AISTUDIO_MODEL;
+      console.log("Using Google AI Studio fallback —", activeModel);
+      return ai;
     }
 
     throw new AppError("Google Cloud credential.json or GEMINI_API_KEY not found.", 500, {
       code: "CONFIG_ERROR",
     });
   }
+  return ai;
+};
 
-  return model;
+const generateText = async (prompt) => {
+  const client = getClient();
+  const response = await client.models.generateContent({
+    model   : activeModel,
+    contents: prompt,
+  });
+  return response.candidates[0].content.parts[0].text
+    .trim()
+    .replace(/^```json\s*/i, "")
+    .replace(/\s*```$/, "");
 };
 
 const analyzeSentiment = async (text) => {
@@ -79,16 +82,12 @@ Text: "${text}"
 
   let cleaned;
   try {
-    const result = await getModel().generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-    const response = await result.response;
-    cleaned = response.candidates[0].content.parts[0].text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+    cleaned = await generateText(prompt);
   } catch (error) {
     throw new AppError("Sentiment analysis is temporarily unavailable", 502, {
-      code: "AI_SERVICE_ERROR",
-      expose: false,
-      cause: error,
+      code   : "AI_SERVICE_ERROR",
+      expose : false,
+      cause  : error,
     });
   }
 
@@ -96,9 +95,9 @@ Text: "${text}"
     return JSON.parse(cleaned);
   } catch (error) {
     throw new AppError("Sentiment analysis returned invalid data", 502, {
-      code: "AI_INVALID_RESPONSE",
-      expose: false,
-      cause: error,
+      code   : "AI_INVALID_RESPONSE",
+      expose : false,
+      cause  : error,
     });
   }
 };
@@ -108,7 +107,7 @@ const extractGigData = async (transcript, validPlatforms = []) => {
     return { platform: null, earnings: null, hours: null, sentiment: null };
   }
 
-  const platformsContext = validPlatforms.length > 0 
+  const platformsContext = validPlatforms.length > 0
     ? `The user's known platforms are: ${validPlatforms.join(", ")}. If the user mentions something that sounds like one of these (e.g. "बोला" sounds like "Ola"), map it exactly to the registered name.`
     : `Look for common gig platforms like Uber, Ola, Swiggy, Zomato, Rapido, Amazon Flex, etc.`;
 
@@ -139,11 +138,7 @@ Note: Be extremely flexible with phonetic variations in Hinglish.
 
   let cleaned;
   try {
-    const result = await getModel().generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-    const response = await result.response;
-    cleaned = response.candidates[0].content.parts[0].text.trim().replace(/^```json\s*/i, "").replace(/\s*```$/, "");
+    cleaned = await generateText(prompt);
   } catch (error) {
     console.error("Gig Data Extraction failed:", error.message);
     return { platform: null, earnings: null, hours: null, sentiment: null };
@@ -151,19 +146,16 @@ Note: Be extremely flexible with phonetic variations in Hinglish.
 
   try {
     const parsed = JSON.parse(cleaned);
-    
-    // Robust number parsing for earnings and hours
     const parseNum = (val) => {
       if (val === null || val === undefined || val === "") return null;
       const n = Number(val);
       return Number.isFinite(n) ? n : null;
     };
-
     return {
-      platform: parsed.platform || null,
-      earnings: parseNum(parsed.earnings),
-      hours: parseNum(parsed.hours),
-      sentiment: parsed.sentiment || null,
+      platform  : parsed.platform || null,
+      earnings  : parseNum(parsed.earnings),
+      hours     : parseNum(parsed.hours),
+      sentiment : parsed.sentiment || null,
     };
   } catch (error) {
     console.error("Failed to parse Gig Data JSON:", error.message);

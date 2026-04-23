@@ -26,4 +26,24 @@ const earningsSchema = new mongoose.Schema({
   date:     { type: Date, default: Date.now },
 }, { timestamps: true });
 
+// Completely decoupled background trigger (runs AFTER any earning is saved to DB)
+earningsSchema.post("save", function (doc) {
+  // Fire and forget in the background so it never blocks the request or the chatbot
+  setTimeout(() => {
+    const { evaluate: evaluateEarningsOpt } = require("../services/nudgeEvaluators/earningsNudgeEvaluator");
+    const { evaluate: evaluateBurnout } = require("../services/nudgeEvaluators/burnoutNudgeEvaluator");
+    const { evaluate: evaluateDailyTarget } = require("../services/nudgeEvaluators/dailyTargetNudgeEvaluator");
+
+    evaluateEarningsOpt(doc.userId, doc.job, doc.amount).catch((err) =>
+      console.warn("[NudgeHook] Earnings optimization check failed:", err.message)
+    );
+    evaluateBurnout(doc.userId).catch((err) =>
+      console.warn("[NudgeHook] Burnout risk check failed:", err.message)
+    );
+    evaluateDailyTarget(doc.userId).catch((err) =>
+      console.warn("[NudgeHook] Daily Target check failed:", err.message)
+    );
+  }, 1000); // 1s delay to let DB settle
+});
+
 module.exports = mongoose.model("EarningsEntry", earningsSchema);

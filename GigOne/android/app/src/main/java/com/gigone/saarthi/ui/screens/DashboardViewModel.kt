@@ -44,13 +44,74 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val chatApi: ChatApi by lazy {
         ApiClient.buildRetrofit(ctx).create(ChatApi::class.java)
     }
+    private val nudgeApi: com.gigone.saarthi.data.NudgeApi by lazy {
+        ApiClient.buildRetrofit(ctx).create(com.gigone.saarthi.data.NudgeApi::class.java)
+    }
     private val voiceRecorder = VoiceRecorder(ctx)
     private val ttsPlayer = TtsPlayer(ctx)
     private val fusedLocationClient: FusedLocationProviderClient by lazy {
         LocationServices.getFusedLocationProviderClient(ctx)
     }
 
+    init {
+        com.gigone.saarthi.util.NotificationHelper.createNotificationChannel(ctx)
+        loadNudges()
+        
+        viewModelScope.launch {
+            com.gigone.saarthi.util.EventBus.refreshDataEvent.collect {
+                loadNudges()
+            }
+        }
+    }
+
     // ─── State ──────────────────────────────────────────────────────────────
+    private val _activeNudges = MutableStateFlow<List<com.gigone.saarthi.data.NudgeItem>>(emptyList())
+    val activeNudges: StateFlow<List<com.gigone.saarthi.data.NudgeItem>> = _activeNudges.asStateFlow()
+
+    private var isFirstLoad = true
+
+    fun loadNudges() {
+        viewModelScope.launch {
+            try {
+                // Filter out duplicates by TYPE (e.g., only 1 surge alert, 1 weather alert at a time)
+                val newNudges = nudgeApi.getActiveNudges().distinctBy { it.type }
+                val currentIds = _activeNudges.value.map { it._id }.toSet()
+                
+                // Only trigger push notifications if this is NOT the first time we load the dashboard.
+                // If it is the first load, we just silently show them as cards to prevent crashing the OS.
+                if (!isFirstLoad) {
+                    newNudges.forEach { nudge ->
+                        if (!currentIds.contains(nudge._id) && (nudge.priority == "urgent" || nudge.priority == "high")) {
+                            com.gigone.saarthi.util.NotificationHelper.showNudgeNotification(
+                                ctx, 
+                                title = nudge.title, 
+                                body = nudge.body,
+                                id = nudge._id.hashCode()
+                            )
+                        }
+                    }
+                }
+                
+                _activeNudges.value = newNudges
+                isFirstLoad = false
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Failed to fetch nudges", e)
+            }
+        }
+    }
+
+    fun dismissNudge(id: String) {
+        viewModelScope.launch {
+            try {
+                // Optimistic UI update
+                _activeNudges.value = _activeNudges.value.filter { it._id != id }
+                nudgeApi.markRead(id)
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Failed to dismiss nudge", e)
+            }
+        }
+    }
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(ChatMessage("assistant", "Ready when you are! Hold the mic to speak."))
     )
@@ -307,6 +368,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     latBody,
                     lonBody
                 )
+
+                // Trigger a check for new nudges now that the AI has processed our state
+                loadNudges()
 
                 // Replace the "Processing" bubble with real transcription + reply
                 val current = _messages.value.dropLast(1)

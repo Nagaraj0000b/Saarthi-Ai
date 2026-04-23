@@ -34,7 +34,7 @@ const getActiveNudges = asyncHandler(async (req, res) => {
     {
       $match: {
         userId: new mongoose.Types.ObjectId(userId),
-        status: { $in: ["pending", "read"] },
+        status: "pending", // Only fetch pending nudges! Read/Dismissed should never be sent back.
         expiresAt: { $gt: now },
       },
     },
@@ -57,19 +57,6 @@ const getActiveNudges = asyncHandler(async (req, res) => {
     { $project: { priorityWeight: 0 } },
   ]);
 
-  // DEBUG: Force inject a dummy notification EVERY time you fetch
-  nudges.unshift({
-    _id: new mongoose.Types.ObjectId(),
-    userId: userId,
-    type: "system",
-    priority: "urgent",
-    title: "🚀 Test Notification",
-    body: "This is a live test notification so you can see how it looks in the app right now!",
-    status: "pending",
-    createdAt: new Date(),
-    expiresAt: new Date(Date.now() + 86400000) // Expires in 24 hours
-  });
-
   res.json(nudges);
 });
 
@@ -81,11 +68,13 @@ const markRead = asyncHandler(async (req, res) => {
   const nudge = await Nudge.findOneAndUpdate(
     { _id: req.params.id, userId: req.user.userId },
     { $set: { status: "read", readAt: new Date() } },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!nudge) {
-    throw new AppError("Nudge not found", 404, { code: "NUDGE_NOT_FOUND" });
+    // If it's already missing from the server (e.g., deleted), just return success 
+    // so the mobile app can clear its local cache without getting stuck.
+    return res.json({ message: "Nudge already missing or read", fallback: true });
   }
 
   res.json(nudge);
@@ -99,11 +88,12 @@ const dismiss = asyncHandler(async (req, res) => {
   const nudge = await Nudge.findOneAndUpdate(
     { _id: req.params.id, userId: req.user.userId },
     { $set: { status: "dismissed" } },
-    { new: true }
+    { returnDocument: "after" }
   );
 
   if (!nudge) {
-    throw new AppError("Nudge not found", 404, { code: "NUDGE_NOT_FOUND" });
+    // Return 200 OK even if missing so Android app clears its frozen cache
+    return res.json({ message: "Nudge already dismissed or missing", fallback: true });
   }
 
   res.json({ message: "Nudge dismissed" });

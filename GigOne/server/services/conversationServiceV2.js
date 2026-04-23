@@ -1,14 +1,18 @@
 /**
- * @fileoverview Enhanced conversational AI engine using GPT/Gemini with template-based prompts.
+ * @fileoverview Enhanced conversational AI engine.
+ * Priority: Vertex AI via credential.json → Google AI Studio via GEMINI_API_KEY
  */
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { VertexAI } = require("@google-cloud/vertexai");
+const { GoogleGenAI } = require("@google/genai");
 const path = require("path");
-const fs = require("fs");
+const fs   = require("fs");
 const AppError = require("../utils/appError");
 
-let model;
+let ai;
+let activeModel = "gemini-2.5-flash"; // updated based on which provider initializes
+
+const VERTEX_MODEL    = "gemini-2.5-flash";
+const AISTUDIO_MODEL  = "google/gemma-4-31b-it";
 
 const normalizeLanguageName = (lang) => {
   if (!lang) return "English";
@@ -28,53 +32,68 @@ const normalizeLanguageName = (lang) => {
   return map[l] || l;
 };
 
-const getModel = () => {
-  if (!model) {
+const getClient = () => {
+  if (!ai) {
     const keyFilename = path.join(__dirname, "..", "credential.json");
+
+    // 1. Prioritize Vertex AI (GCP Credits) via service account
     if (fs.existsSync(keyFilename)) {
       try {
         const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
-        const vertexAI = new VertexAI({
-          project: credentials.project_id,
-          location: "us-central1",
-          keyFilename: keyFilename,
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+        ai = new GoogleGenAI({
+          vertexai : true,
+          project  : credentials.project_id,
+          location : "us-central1",
         });
-        model = vertexAI.getGenerativeModel({ model: "gemini-2.5-flash" }); // Use stable model
-        return model;
+        activeModel = VERTEX_MODEL;
+        console.log("Using Vertex AI (GCP) for Gemini —", activeModel);
+        return ai;
       } catch (error) {
-        console.warn("Vertex AI initialization failed:", error.message);
+        console.warn("Vertex AI init failed, falling back to AI Studio:", error.message);
       }
     }
+
+    // 2. Fallback to Google AI Studio (GEMINI_API_KEY)
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        return model;
-      } catch (error) {
-        throw new AppError("Failed to initialize Gemini provider", 500, { code: "AI_INIT_ERROR", cause: error });
-      }
+      ai = new GoogleGenAI({ apiKey });
+      activeModel = AISTUDIO_MODEL;
+      console.log("Using Google AI Studio fallback —", activeModel);
+      return ai;
     }
-    throw new AppError("Google Cloud credential.json or GEMINI_API_KEY not found.", 500, { code: "CONFIG_ERROR" });
+
+    throw new AppError("No Gemini provider configured (credential.json or GEMINI_API_KEY required)", 500, {
+      code: "CONFIG_ERROR",
+    });
   }
-  return model;
+  return ai;
+};
+
+const generateText = async (prompt) => {
+  const client = getClient();
+  const response = await client.models.generateContent({
+    model   : activeModel,
+    contents: prompt,
+  });
+  return response.candidates[0].content.parts[0].text.trim();
 };
 
 const getEmergencyResponse = (type, language) => {
   const fallbacks = {
     hindi: {
-        greeting: "नमस्ते! आज आपका दिन कैसा रहा?",
-        retry: "क्षमा करें, मैंने सुना नहीं। आप क्या कह रहे थे?",
-        default: "कृपया मुझे और बताएं।"
+      greeting: "नमस्ते! आज आपका दिन कैसा रहा?",
+      retry   : "क्षमा करें, मैंने सुना नहीं। आप क्या कह रहे थे?",
+      default : "कृपया मुझे और बताएं।"
     },
     english: {
-        greeting: "Hello! How was your work today?",
-        retry: "Sorry, I didn't catch that. Could you please repeat?",
-        default: "Please tell me more."
+      greeting: "Hello! How was your work today?",
+      retry   : "Sorry, I didn't catch that. Could you please repeat?",
+      default : "Please tell me more."
     }
   };
   const lang = (language || "english").toLowerCase();
-  const set = fallbacks[lang] || fallbacks.english;
+  const set  = fallbacks[lang] || fallbacks.english;
   return set[type] || set.default;
 };
 
@@ -82,41 +101,38 @@ const generateConstrainedReply = async (nextState, context = null, language = nu
   const normalizedLang = normalizeLanguageName(language);
   let goal = "";
 
-  // Use "Ji" if name exists and language is Hindi, otherwise neutral/respectful address
-  const userName = context?.userName ? (normalizedLang === "Hindi" ? `${context.userName} जी` : context.userName) : "";
+  const userName = context?.userName
+    ? (normalizedLang === "Hindi" ? `${context.userName} जी` : context.userName)
+    : "";
 
   if (nextState === "greeting") {
     goal = `Greet the user ${userName} politely in ${normalizedLang}. Ask how their day was and how they are feeling after their shift.`;
   } else if (nextState === "default" || nextState === "retry") {
     goal = `The user's response was unclear. Politely ask them in ${normalizedLang} to repeat what they said.`;
   } else if (nextState === "ask_platform" || nextState === "retry_platform") {
-    const mood = context?.dailyMood?.moodLabel || "neutral";
-    const jobs = context?.platforms?.length > 0 ? context.platforms.join(", ") : "platforms";
+    const mood    = context?.dailyMood?.moodLabel || "neutral";
+    const jobs    = context?.platforms?.length > 0 ? context.platforms.join(", ") : "platforms";
     const isRetry = nextState.includes("retry");
-    goal = isRetry 
+    goal = isRetry
       ? `The platform was not clear. Ask them in ${normalizedLang} to choose from: ${jobs}.`
       : `Acknowledge their mood (${mood}) respectfully in ${normalizedLang}. Ask which platform they worked on: ${jobs}.`;
   } else if (nextState === "ask_earnings" || nextState === "retry_earnings") {
     const platform = context?.extractedData?.platform || context?.extractedData?.job || "platform";
-    const isRetry = nextState.includes("retry");
+    const isRetry  = nextState.includes("retry");
     goal = isRetry
       ? `The earnings amount was unclear. Ask again in ${normalizedLang} for the total amount earned on ${platform}.`
       : `Ask in ${normalizedLang} for the total earnings for today's ${platform} shift.`;
   } else if (nextState === "ask_hours" || nextState === "retry_hours") {
     const platform = context?.extractedData?.platform || context?.extractedData?.job || "platform";
     const earnings = context?.extractedData?.earnings || "amount";
-    const isRetry = nextState.includes("retry");
+    const isRetry  = nextState.includes("retry");
     goal = isRetry
       ? `The hours were unclear. Ask again in ${normalizedLang} for the total hours worked on ${platform}.`
       : `Confirm the earnings (${earnings}) in ${normalizedLang}. Ask for the total hours worked on ${platform} today.`;
   } else if (nextState === "complete") {
-    const earnings = context?.extractedData?.earnings || 0;
-    const hours = context?.extractedData?.hours || 1;
-    
     let extra = "";
     if (context?.weather?.nextShift) extra += ` Mention that the weather forecast for the next shift is ${context.weather.nextShift.description}.`;
-    if (context?.traffic) extra += ` Mention that traffic is ${context.traffic.traffic_level}.`;
-    
+    if (context?.traffic)            extra += ` Mention that traffic is ${context.traffic.traffic_level}.`;
     goal = `The check-in is done. Give a polite closing remark in ${normalizedLang}.${extra} Wish them a good rest.`;
   } else {
     goal = `Acknowledge them and ask for more details in ${normalizedLang} about their work day.`;
@@ -144,11 +160,7 @@ Response in ${normalizedLang}:
 
   try {
     console.log("Generating AI reply for state:", nextState, "language:", normalizedLang);
-    const result = await getModel().generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-    });
-    const response = await result.response;
-    const text = response.candidates[0].content.parts[0].text.trim();
+    const text = await generateText(prompt);
     console.log("AI Reply Success:", text);
     return text;
   } catch (error) {

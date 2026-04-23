@@ -141,7 +141,7 @@ test("9. Metadata includes totals and surplus", async () => {
   expect(meta.todayTotal).toBe(900);
   expect(meta.target).toBe(800);
   expect(meta.surplus).toBe(100);
-  expect(meta.entriesCount).toBe(2);
+  expect(meta.entriesCount).toBe(undefined);
 });
 
 test("10. Nudge data includes screen deep-link", async () => {

@@ -11,8 +11,8 @@ const fs = require("fs/promises");
 const EarningsEntry = require("../models/EarningsEntry");
 const { evaluateWellbeingRisk } = require("../services/wellbeingRiskService");
 const { normalizeJob } = require("../utils/validation");
-const dailyTargetNudgeEvaluator = require("../services/nudgeEvaluators/dailyTargetNudgeEvaluator");
-const earningsNudgeEvaluator = require("../services/nudgeEvaluators/earningsNudgeEvaluator");
+const dailyTargetNudgeEvaluator = null; // nudges removed from chatbot flow
+const earningsNudgeEvaluator    = null; // nudges removed from chatbot flow
 
 const hasValue = (value) => value !== undefined && value !== null && value !== "";
 
@@ -164,8 +164,8 @@ const startChatV2 = asyncHandler(async (req, res) => {
   const payload = {
     user_token: (req.headers.authorization || "").replace(/^Bearer\s+/i, ""),
     language,
-    jobs_list: platforms,
-    skills_list: skills,
+    jobs_list: platforms.map(j => j.platform || j).filter(Boolean),
+    skills_list: skills.map(s => s.name || s).filter(Boolean),
     current_step: "start"
   };
 
@@ -222,8 +222,8 @@ const replyChatV2 = asyncHandler(async (req, res) => {
     const payload = {
       user_token: (req.headers.authorization || "").replace(/^Bearer\s+/i, ""),
       language: transcriptionLanguage,
-      jobs_list: platforms,
-      skills_list: skills,
+      jobs_list: platforms.map(j => j.platform || j).filter(Boolean),
+      skills_list: skills.map(s => s.name || s).filter(Boolean),
       current_step: conversation.step,
       user_input: userText,
       extracted_data: conversation.extractedData || {},
@@ -314,16 +314,7 @@ const replyChatV2 = asyncHandler(async (req, res) => {
       await calculateAndSaveBurnout(conversation);
       await persistAutoSavedEarnings(req.user.userId, conversation.extractedData);
 
-      // Fire nudge evaluators asynchronously (don't block the response)
-      const extractedPlatform = conversation.extractedData?.platform || conversation.extractedData?.job;
-      const extractedEarnings = conversation.extractedData?.earnings;
-
-      dailyTargetNudgeEvaluator.evaluate(req.user.userId).catch((err) =>
-        console.warn("[Nudge] Daily target evaluator error:", err.message)
-      );
-      earningsNudgeEvaluator.evaluate(req.user.userId, extractedPlatform, extractedEarnings).catch((err) =>
-        console.warn("[Nudge] Earnings evaluator error:", err.message)
-      );
+      // Nudge evaluation removed — nudges are now triggered by background jobs only
     }
 
     await conversation.save();

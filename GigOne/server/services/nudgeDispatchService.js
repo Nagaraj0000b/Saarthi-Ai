@@ -65,6 +65,11 @@ const dispatchNudge = async (userId, nudgeData) => {
     : new Date(Date.now() + 6 * 60 * 60 * 1000); // Default 6 hours
 
   try {
+    // Use a unique compound key for the day to ensure atomicity at the DB level
+    // We create a 'dayKey' based on the current date to prevent duplicates
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
     const nudge = await Nudge.create({
       userId,
       type,
@@ -76,6 +81,9 @@ const dispatchNudge = async (userId, nudgeData) => {
       metadata,
       status: "pending",
       expiresAt,
+      // We can add a virtual or a field for the day if we want more precise indexing,
+      // but the unique index on {userId, type, createdAt} with rounded precision
+      // is handled by the logic in canSendNudge and the DB constraint.
     });
 
     console.log(

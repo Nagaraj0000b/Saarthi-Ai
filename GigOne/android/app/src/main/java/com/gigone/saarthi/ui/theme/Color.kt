@@ -43,51 +43,38 @@ class AppColorsClass(
     }
 }
 
-// Upgraded to a Premium, Modern Aesthetic (Slate & Indigo)
+// Eco-Professional "Forest & Fern" Palette (Tonal Green Harmony)
 val professionalWhiteColors = AppColorsClass(
-    primary = Color(0xFF4F46E5),       // Deep Premium Indigo (modern tech/fintech primary)
-    accent = Color(0xFF10B981),        // Vibrant Emerald for success and earnings
-    bgDeep = Color(0xFFF8FAFC),        // Slate 50 - Very clean, modern off-white background
-    bgCard = Color(0xFFFFFFFF),        // Pure white for elevated cards
-    textPrimary = Color(0xFF0F172A),     // Slate 900 - Rich near-black for high legibility
-    textSecondary = Color(0xFF475569),   // Slate 600 - Crisp secondary text
-    textMuted = Color(0xFF94A3B8),       // Slate 400 - Muted placeholder text
-    borderSubtle = Color(0xFFE2E8F0),    // Slate 200 - Extremely subtle, clean borders
-    error = Color(0xFFEF4444),         // Vibrant Rose for errors
-    success = Color(0xFF10B981)
+    primary = Color(0xFF40916C),       // Canopy Green - Brand Accent for location, language, and mic
+    accent = Color(0xFF1B4332),       // Deep Forest - Used for Earnings/Money and high-impact CTAs
+    bgDeep = Color(0xFFEFF6EE),        // Soft Fern - Natural, warm background to reduce eye strain
+    bgCard = Color(0xFFFFFFFF),        // Pure White - Crisp layered look for job cards and chat boxes
+    textPrimary = Color(0xFF1B4332),     // Deep Forest - Sophisticated, rich dark green for all main text
+    textSecondary = Color(0xFF4B6E5C),   // Muted Forest - Mid-tone green for secondary info
+    textMuted = Color(0xFF8EAB9A),       // Soft Sage - Muted grey-green for placeholder text
+    borderSubtle = Color(0xFFD1DCD4),    // Pale Fern - Subtle borders that blend with the theme
+    error = Color(0xFF7F1D1D),         // Dark Red - Strictly for errors only
+    success = Color(0xFF1B4332)        // Deep Forest - Using weight/size instead of a different color for money
 )
 
-// Official Zomato Color Palette
-val zomatoColors = AppColorsClass(
-    primary = Color(0xFFE23744),       // Zomato Red
-    accent = Color(0xFFE23744),        // Accent also red
-    bgDeep = Color(0xFFF4F4F2),        // Light cream/grey background
-    bgCard = Color(0xFFFFFFFF),        // White cards
-    textPrimary = Color(0xFF1C1C1C),     // Zomato Dark Grey for text
-    textSecondary = Color(0xFF525252),   // Secondary text grey (Slate 700 equivalent)
-    textMuted = Color(0xFF9C9C9C),       // Muted grey
-    borderSubtle = Color(0xFFE8E8E8),    // Light border
-    error = Color(0xFFE23744),         // Error also using brand red
-    success = Color(0xFF48C479)        // Zomato success green
-)
-
-// High-Contrast Dark Mode Palette
+// Forest Dew Dark Mode - Whisper Edition (Low Glow)
 val darkColors = AppColorsClass(
-    primary = Color(0xFF818CF8),       // Indigo 400
-    accent = Color(0xFF34D399),        // Emerald 400
-    bgDeep = Color(0xFF0F172A),        // Slate 900
-    bgCard = Color(0xFF1E293B),        // Slate 800
-    textPrimary = Color(0xFFF8FAFC),     // Slate 50
-    textSecondary = Color(0xFF94A3B8),   // Slate 400
-    textMuted = Color(0xFF64748B),       // Slate 500
-    borderSubtle = Color(0xFF334155),    // Slate 700
-    error = Color(0xFFFB7185),         // Rose 400
-    success = Color(0xFF34D399)
+    primary = Color(0xFFA8D5B5),       // Whisper Green - Soft, pastel accent for zero glow effect
+    accent = Color(0xFFA8D5B5),        // Whisper Green - Same as primary; distinguished by weight/size for money
+    bgDeep = Color(0xFF0A0F0D),        // Deep Forest Night - Near-black with green undertone
+    bgCard = Color(0xFF14201A),        // Raised Canopy - Surface for main cards and chat box
+    textPrimary = Color(0xFFE8F5E9),     // Frost White - Warm off-white to prevent AMOLED halation
+    textSecondary = Color(0xFF5A8A6A),   // Muted Pine - Balanced neutral for secondary info
+    textMuted = Color(0xFF2D4D3A),       // Deep Moss - For very subtle elements
+    borderSubtle = Color(0xFF0F1A14),    // Deep Moss - Inner card surface and professional borders
+    error = Color(0xFF7F1D1D),         // Dark Red - Muted error state
+    success = Color(0xFFA8D5B5)        // Whisper Green
 )
 
-// Default is now the Zomato theme
+// Default is now the Professional Light theme
 object AppColors {
-    var instance by mutableStateOf(zomatoColors)
+    var instance by mutableStateOf(professionalWhiteColors)
+
 
     // Delegates for easy access across the app
     val Primary get() = instance.Primary

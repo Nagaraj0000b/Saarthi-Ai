@@ -61,6 +61,7 @@ const addEarning = asyncHandler(async (req, res) => {
   });
 
   res.status(201).json(entry);
+
 });
 
 const updateEarning = asyncHandler(async (req, res) => {
@@ -68,7 +69,7 @@ const updateEarning = asyncHandler(async (req, res) => {
   const entry = await EarningsEntry.findOneAndUpdate(
     { _id: req.params.id, userId: req.user.userId },
     payload,
-    { new: true, runValidators: true }
+    { returnDocument: "after", runValidators: true }
   );
 
   if (!entry) {

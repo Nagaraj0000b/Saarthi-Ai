@@ -184,9 +184,16 @@ def get_burnout_risk(context: UserContext):
         pred_probs = model_burnout.predict(prediction_matrix)[0]
         
         burnout_label_idx = int(np.argmax(pred_probs))
-        
-        # Burnout classes are ['High', 'Low', 'Medium']. Inverse transform:
-        burnout_label = encoders['burnout_risk'].inverse_transform([burnout_label_idx])[0]
+
+        # Use the loaded burnout LabelEncoder to retrieve the class name
+        le_burnout = encoders.get('burnout_risk')
+        if le_burnout:
+            burnout_label = le_burnout.classes_[burnout_label_idx]
+        else:
+            # Fallback if encoder is missing, though it should be in saarthi_encoders.pkl
+            burnout_map = {0: 'High', 1: 'Low', 2: 'Medium'}
+            burnout_label = burnout_map.get(burnout_label_idx, "Unknown")
+
         confidence = float(pred_probs[burnout_label_idx])
         
         return BurnoutPrediction(

@@ -27,7 +27,6 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.gigone.saarthi.ui.theme.AppColors
-import com.gigone.saarthi.ui.theme.zomatoColors
 import com.gigone.saarthi.ui.theme.professionalWhiteColors
 import com.gigone.saarthi.ui.theme.darkColors
 import com.gigone.saarthi.util.TokenManager
@@ -204,7 +203,7 @@ fun ProfileScreen(
             ProfileMenuItem(
                 icon = Icons.Outlined.Palette,
                 title = "Theme",
-                subtitle = "Switch between Zomato and Professional themes",
+                subtitle = "Switch between Light and Dark modes",
                 onClick = { showThemeDialog = true }
             )
 
@@ -225,7 +224,7 @@ fun ProfileScreen(
                     title = { Text("Select Theme", color = AppColors.TextPrimary) },
                     text = {
                         Column {
-                            val themes = listOf("Zomato Red", "Professional Indigo", "Dark")
+                            val themes = listOf("Light", "Dark")
                             themes.forEach { theme ->
                                 Row(
                                     modifier = Modifier
@@ -233,8 +232,7 @@ fun ProfileScreen(
                                         .clickable {
                                             TokenManager.saveThemeMode(context, theme)
                                             AppColors.instance = when(theme) {
-                                                "Zomato Red" -> zomatoColors
-                                                "Professional Indigo" -> professionalWhiteColors
+                                                "Light" -> professionalWhiteColors
                                                 else -> darkColors
                                             }
                                             showThemeDialog = false

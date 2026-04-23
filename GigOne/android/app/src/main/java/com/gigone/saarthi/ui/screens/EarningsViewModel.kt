@@ -71,6 +71,7 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
             try {
                 val newEntry = earningsApi.addEarning(request)
                 _entries.value = listOf(newEntry) + _entries.value
+                com.gigone.saarthi.util.EventBus.triggerRefresh() // Tell Dashboard to check for target nudges
                 onSuccess()
             } catch (e: HttpException) {
                 if (e.code() == 401) {
