@@ -9,6 +9,8 @@ const path = require("path");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const passport = require("passport");
+const cron = require("node-cron");
+const { processHourlyTargets } = require("./services/hourlyTargetService");
 const connectDB = require("./config/db");
 const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 
@@ -85,6 +87,16 @@ const bootstrap = async () => {
       } catch (err) {
         console.warn("Nudge Engine: Failed to start environmental polling:", err.message);
       }
+
+      // Hourly Target Nudges
+      cron.schedule("0 * * * *", async () => {
+        try {
+          await processHourlyTargets();
+        } catch (err) {
+          console.error("Error processing hourly target nudges:", err);
+        }
+      });
+      console.log("Nudge Engine: Hourly target cron job scheduled.");
     });
   } catch (listenError) {
     console.error("Server failed to listen on port ${PORT}:", listenError);
