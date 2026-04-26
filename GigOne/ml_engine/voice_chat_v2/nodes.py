@@ -4,6 +4,15 @@ from typing import Dict, Any
 from .state import VoiceChatState
 
 NODE_BACKEND_URL = os.environ.get("NODE_BACKEND_URL", "http://127.0.0.1:5000")
+NODE_BACKEND_TIMEOUT_SECONDS = int(os.environ.get("NODE_BACKEND_TIMEOUT_SECONDS", "60"))
+
+
+def build_extract_payload(state: VoiceChatState) -> Dict[str, Any]:
+    return {
+        "text": state.get("user_input", ""),
+        "translatedText": state.get("translated_text", ""),
+        "platforms": state.get("jobs_list", [])
+    }
 
 def greeting_node(state: VoiceChatState) -> Dict[str, Any]:
     """Requests localized greeting from Node backend."""
@@ -14,7 +23,7 @@ def greeting_node(state: VoiceChatState) -> Dict[str, Any]:
         "skills": state.get("skills_list", [])
     }
     try:
-        response = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-greeting", headers=headers, json=payload, timeout=30)
+        response = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-greeting", headers=headers, json=payload, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         response.raise_for_status()
         greeting = response.json().get("summary", "Hello!")
     except Exception as e:
@@ -37,7 +46,7 @@ def mood_node(state: VoiceChatState) -> Dict[str, Any]:
     }
     
     try:
-        resp_sent = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-sentiment", headers=headers, json=payload_sentiment, timeout=30)
+        resp_sent = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-sentiment", headers=headers, json=payload_sentiment, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_sent.raise_for_status()
         result = resp_sent.json()
         
@@ -63,7 +72,7 @@ def mood_node(state: VoiceChatState) -> Dict[str, Any]:
     }
     
     try:
-        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=30)
+        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_reply.raise_for_status()
         reply = resp_reply.json().get("summary", "Got it. Which platform did you work on today?")
     except Exception as e:
@@ -82,13 +91,10 @@ def platform_node(state: VoiceChatState) -> Dict[str, Any]:
     headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
     
     # 1. Extract Platform from user input
-    payload_extract = {
-        "text": state.get("user_input", ""),
-        "platforms": state.get("jobs_list", [])
-    }
+    payload_extract = build_extract_payload(state)
     
     try:
-        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=30)
+        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_ext.raise_for_status()
         data = resp_ext.json()
         platform = data.get("platform")
@@ -112,7 +118,7 @@ def platform_node(state: VoiceChatState) -> Dict[str, Any]:
     }
     
     try:
-        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=30)
+        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_reply.raise_for_status()
         reply = resp_reply.json().get("summary", f"Got it, {platform}. How much did you earn today?")
     except Exception as e:
@@ -130,13 +136,10 @@ def earnings_node(state: VoiceChatState) -> Dict[str, Any]:
     headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
     
     # 1. Extract Earnings from user input
-    payload_extract = {
-        "text": state.get("user_input", ""),
-        "platforms": state.get("jobs_list", [])
-    }
+    payload_extract = build_extract_payload(state)
     
     try:
-        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=30)
+        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_ext.raise_for_status()
         data = resp_ext.json()
         earnings = data.get("earnings")
@@ -162,7 +165,7 @@ def earnings_node(state: VoiceChatState) -> Dict[str, Any]:
     }
     
     try:
-        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=30)
+        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_reply.raise_for_status()
         reply = resp_reply.json().get("summary", f"Got it, {earnings}. How many hours did you work?")
     except Exception as e:
@@ -180,13 +183,10 @@ def hours_node(state: VoiceChatState) -> Dict[str, Any]:
     headers = {"Authorization": f"Bearer {state.get('user_token', '')}"}
     
     # 1. Extract Hours from user input
-    payload_extract = {
-        "text": state.get("user_input", ""),
-        "platforms": state.get("jobs_list", [])
-    }
+    payload_extract = build_extract_payload(state)
     
     try:
-        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=30)
+        resp_ext = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-extract", headers=headers, json=payload_extract, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_ext.raise_for_status()
         data = resp_ext.json()
         hours = data.get("hours")
@@ -223,11 +223,24 @@ def final_summary_node(state: VoiceChatState) -> Dict[str, Any]:
     }
     
     try:
-        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=30)
+        resp_reply = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload_reply, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         resp_reply.raise_for_status()
         reply = resp_reply.json().get("summary", "Thanks for sharing! Have a great next shift.")
     except Exception as e:
-        print(f"Final summary error: {e}")
+        print(
+            "Final summary error:",
+            {
+                "error_type": type(e).__name__,
+                "message": str(e),
+                "timeout_seconds": NODE_BACKEND_TIMEOUT_SECONDS,
+                "language": state.get("language", "English"),
+                "selected_platform": state.get("selected_platform"),
+                "expected_earnings": state.get("expected_earnings"),
+                "hours_worked": state.get("hours_worked"),
+                "weather_condition": state.get("weather_condition"),
+                "traffic_condition": state.get("traffic_condition"),
+            }
+        )
         reply = "Thanks for sharing! Have a great next shift."
 
     return {
@@ -269,7 +282,7 @@ def retry_node(state: VoiceChatState) -> Dict[str, Any]:
     }
     
     try:
-        response = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload, timeout=30)
+        response = requests.post(f"{NODE_BACKEND_URL}/api/chat-v2/raw-reply", headers=headers, json=payload, timeout=NODE_BACKEND_TIMEOUT_SECONDS)
         response.raise_for_status()
         reply = response.json().get("summary", "I didn't quite catch that. Could you repeat?")
     except Exception as e:

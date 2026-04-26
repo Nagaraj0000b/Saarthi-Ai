@@ -13,7 +13,7 @@ let ai;
 let activeModel;
 
 const VERTEX_MODEL   = "gemini-2.5-flash";
-const AISTUDIO_MODEL = "google/gemma-4-31b-it";
+const AISTUDIO_MODEL = "gemini-2.5-flash";
 
 const getClient = () => {
   if (!ai) {

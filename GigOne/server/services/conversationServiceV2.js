@@ -9,10 +9,35 @@ const fs   = require("fs");
 const AppError = require("../utils/appError");
 
 let ai;
-let activeModel = "gemini-2.5-flash"; // updated based on which provider initializes
+let activeModel;
 
-const VERTEX_MODEL    = "gemini-2.5-flash";
-const AISTUDIO_MODEL  = "google/gemma-4-31b-it";
+const VERTEX_MODEL = "gemini-2.5-flash";
+const MAX_PROMPT_LENGTH = 1500;
+
+(() => {
+  const keyFilename = path.join(__dirname, "..", "credential.json");
+  if (!fs.existsSync(keyFilename)) {
+    throw new AppError("Vertex AI credential.json not found", 500, {
+      code: "CONFIG_ERROR",
+    });
+  }
+
+  try {
+    const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+    ai = new GoogleGenAI({
+      vertexai: true,
+      project: credentials.project_id,
+      location: "us-central1",
+    });
+    activeModel = VERTEX_MODEL;
+    console.log("Using Vertex AI (GCP) for chat replies -", activeModel);
+  } catch (error) {
+    throw new AppError(`Failed to initialise Vertex AI client: ${error.message}`, 500, {
+      code: "INIT_ERROR",
+    });
+  }
+})();
 
 const normalizeLanguageName = (lang) => {
   if (!lang) return "English";
@@ -32,49 +57,17 @@ const normalizeLanguageName = (lang) => {
   return map[l] || l;
 };
 
-const getClient = () => {
-  if (!ai) {
-    const keyFilename = path.join(__dirname, "..", "credential.json");
-
-    // 1. Prioritize Vertex AI (GCP Credits) via service account
-    if (fs.existsSync(keyFilename)) {
-      try {
-        const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
-        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
-        ai = new GoogleGenAI({
-          vertexai : true,
-          project  : credentials.project_id,
-          location : "us-central1",
-        });
-        activeModel = VERTEX_MODEL;
-        console.log("Using Vertex AI (GCP) for Gemini —", activeModel);
-        return ai;
-      } catch (error) {
-        console.warn("Vertex AI init failed, falling back to AI Studio:", error.message);
-      }
-    }
-
-    // 2. Fallback to Google AI Studio (GEMINI_API_KEY)
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      ai = new GoogleGenAI({ apiKey });
-      activeModel = AISTUDIO_MODEL;
-      console.log("Using Google AI Studio fallback —", activeModel);
-      return ai;
-    }
-
-    throw new AppError("No Gemini provider configured (credential.json or GEMINI_API_KEY required)", 500, {
-      code: "CONFIG_ERROR",
-    });
-  }
-  return ai;
-};
+const trimPrompt = (prompt) =>
+  typeof prompt === "string" && prompt.length > MAX_PROMPT_LENGTH
+    ? prompt.slice(0, MAX_PROMPT_LENGTH) + " ... (truncated)"
+    : prompt;
 
 const generateText = async (prompt) => {
-  const client = getClient();
+  const client = ai;
   const response = await client.models.generateContent({
-    model   : activeModel,
-    contents: prompt,
+    model: activeModel,
+    contents: trimPrompt(prompt),
+    generationConfig: { maxOutputTokens: 180 },
   });
   return response.candidates[0].content.parts[0].text.trim();
 };

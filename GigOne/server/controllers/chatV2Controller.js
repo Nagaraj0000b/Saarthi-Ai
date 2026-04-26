@@ -13,6 +13,8 @@ const { evaluateWellbeingRisk } = require("../services/wellbeingRiskService");
 const { normalizeJob } = require("../utils/validation");
 const dailyTargetNudgeEvaluator = null; // nudges removed from chatbot flow
 const earningsNudgeEvaluator    = null; // nudges removed from chatbot flow
+const CHAT_TURN_URL = process.env.CHAT_TURN_URL || "http://127.0.0.1:8000/chat/turn";
+const CHAT_TURN_TIMEOUT_MS = Number(process.env.CHAT_TURN_TIMEOUT_MS || 60000);
 
 const hasValue = (value) => value !== undefined && value !== null && value !== "";
 
@@ -141,8 +143,9 @@ const extractRawData = asyncHandler(async (req, res) => {
   const user = req.user ? await User.findById(req.user.userId) : null;
   const text = req.body.text || "";
   const platforms = req.body.platforms || user?.registeredJobs || [];
-  
-  const result = await extractGigData(text, platforms);
+  const translatedText = req.body.translatedText || "";
+
+  const result = await extractGigData(text, translatedText, platforms);
   res.json(result);
 });
 
@@ -169,9 +172,8 @@ const startChatV2 = asyncHandler(async (req, res) => {
     current_step: "start"
   };
 
-  // Add a 15-second timeout so the Android app doesn't spin forever if Python is down
-  const response = await axios.post("http://127.0.0.1:8000/chat/turn", payload, {
-    timeout: 15000 
+  const response = await axios.post(CHAT_TURN_URL, payload, {
+    timeout: CHAT_TURN_TIMEOUT_MS
   });
   const result = response.data;
 
@@ -203,6 +205,7 @@ const replyChatV2 = asyncHandler(async (req, res) => {
   }
 
   const filePath = req.file.path;
+  const turnStartTime = Date.now(); // Start timing the turn
   try {
     const conversationId = req.body.conversationId;
     const conversation = await Conversation.findOne({ _id: conversationId, userId: req.user.userId });
@@ -216,8 +219,11 @@ const replyChatV2 = asyncHandler(async (req, res) => {
 
     let transcriptionLanguage = typeof req.body.language === "string" ? req.body.language.trim() : conversation.language || "English";
     
+    const transcriptionStart = Date.now();
     const transcriptionResult = await transcribeAudio(filePath, transcriptionLanguage);
+    const transcriptionEnd = Date.now();
     const userText = transcriptionResult?.originalText || transcriptionResult?.translatedText || "";
+    const translatedText = transcriptionResult?.translatedText || userText;
 
     const payload = {
       user_token: (req.headers.authorization || "").replace(/^Bearer\s+/i, ""),
@@ -226,6 +232,7 @@ const replyChatV2 = asyncHandler(async (req, res) => {
       skills_list: skills.map(s => s.name || s).filter(Boolean),
       current_step: conversation.step,
       user_input: userText,
+      translated_text: translatedText,
       extracted_data: conversation.extractedData || {},
       selected_platform: conversation.extractedData?.platform || conversation.extractedData?.job,
       expected_earnings: hasValue(conversation.extractedData?.earnings) ? String(conversation.extractedData.earnings) : undefined,
@@ -234,10 +241,11 @@ const replyChatV2 = asyncHandler(async (req, res) => {
       sentiment_score: conversation.dailyMood?.moodScore
     };
 
-  // Add a 15-second timeout
-  const response = await axios.post("http://127.0.0.1:8000/chat/turn", payload, {
-    timeout: 15000 
-  });
+    const aiStart = Date.now();
+    const response = await axios.post(CHAT_TURN_URL, payload, {
+      timeout: CHAT_TURN_TIMEOUT_MS
+    });
+    const aiEnd = Date.now();
     const result = response.data;
 
     console.log("\n---- DEBUG CHAT V2 ----");
@@ -246,6 +254,17 @@ const replyChatV2 = asyncHandler(async (req, res) => {
     console.log("LangGraph Input Step:", conversation.step);
     console.log("LangGraph Output Step:", result.current_step);
     console.log("AI Reply:", result.final_summary);
+
+    // LATENCY LOGGING
+    const totalTurnTime = Date.now() - turnStartTime;
+    const transcriptionTime = transcriptionEnd - transcriptionStart;
+    const aiResponseTime = aiEnd - aiStart;
+
+    console.log("⏱️ TURN LATENCY:");
+    console.log(`  Total Turn Time: ${totalTurnTime}ms`);
+    console.log(`  Transcription: ${transcriptionTime}ms`);
+    console.log(`  AI Response (Python): ${aiResponseTime}ms`);
+    console.log(`  Overhead/DB: ${totalTurnTime - transcriptionTime - aiResponseTime}ms`);
     console.log("-----------------------\n");
 
     const previousStep = conversation.step;

@@ -11,53 +11,56 @@ const AppError = require("../utils/appError");
 let ai;
 let activeModel;
 
-const VERTEX_MODEL   = "gemini-2.5-flash";
-const AISTUDIO_MODEL = "google/gemma-4-31b-it";
+// ---------------------------------------------------------------------------
+// Eager‑init: Load Vertex AI client once when the module is required.
+// Fail fast if the service‑account credentials are missing – we do NOT fall back to
+// AI Studio because you explicitly want to use Vertex AI only.
+// ---------------------------------------------------------------------------
+const VERTEX_MODEL = "gemini-2.5-flash";
 
-const getClient = () => {
-  if (!ai) {
-    const keyFilename = path.join(__dirname, "..", "credential.json");
-
-    // 1. Prioritize Vertex AI (GCP Credits) via service account
-    if (fs.existsSync(keyFilename)) {
-      try {
-        const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
-        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
-        ai = new GoogleGenAI({
-          vertexai : true,
-          project  : credentials.project_id,
-          location : "us-central1",
-        });
-        activeModel = VERTEX_MODEL;
-        console.log("Using Vertex AI (GCP Credits) for Gemini —", activeModel);
-        return ai;
-      } catch (error) {
-        console.warn("Vertex AI init failed, falling back to AI Studio:", error.message);
-      }
-    }
-
-    // 2. Fallback to Google AI Studio (free tier)
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (apiKey) {
-      ai = new GoogleGenAI({ apiKey });
-      activeModel = AISTUDIO_MODEL;
-      console.log("Using Google AI Studio fallback —", activeModel);
-      return ai;
-    }
-
-    throw new AppError("Google Cloud credential.json or GEMINI_API_KEY not found.", 500, {
-      code: "CONFIG_ERROR",
-    });
+(() => {
+  const keyFilename = path.join(__dirname, "..", "credential.json");
+  if (!fs.existsSync(keyFilename)) {
+    throw new AppError(
+      "Vertex AI credential.json not found – cannot initialise Gemini client.",
+      500,
+      { code: "CONFIG_ERROR" }
+    );
   }
-  return ai;
-};
+  try {
+    const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
+    process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+    ai = new GoogleGenAI({
+      vertexai: true,
+      project: credentials.project_id,
+      location: "us-central1",
+    });
+    activeModel = VERTEX_MODEL;
+    console.log("Using Vertex AI (GCP Credits) for Gemini —", activeModel);
+  } catch (err) {
+    throw new AppError(
+      `Failed to initialise Vertex AI client: ${err.message}`,
+      500,
+      { code: "INIT_ERROR" }
+    );
+  }
+})();
+
+// Helper to keep prompts short – prevents the model from hallucinating on huge context.
+const MAX_PROMPT_LENGTH = 1500; // characters
+const trimPrompt = (p) =>
+  typeof p === "string" && p.length > MAX_PROMPT_LENGTH
+    ? p.slice(0, MAX_PROMPT_LENGTH) + " ... (truncated)"
+    : p;
 
 const generateText = async (prompt) => {
-  const client = getClient();
-  const response = await client.models.generateContent({
-    model   : activeModel,
-    contents: prompt,
-  });
+  const client = ai; // client is guaranteed to exist after module load
+  const safePrompt = trimPrompt(prompt);
+    const response = await client.models.generateContent({
+      model: activeModel,
+      contents: safePrompt,
+      generationConfig: { maxOutputTokens: 500 },
+    });
   return response.candidates[0].content.parts[0].text
     .trim()
     .replace(/^```json\s*/i, "")
@@ -76,6 +79,8 @@ Analyze the following text and return a JSON object with:
 2. "score" (-1.0 to 1.0)
 3. "summary" (1 sentence)
 4. "suggestion" (1 actionable tip)
+    - If any field cannot be confidently determined, set it to null.
+    - Return ONLY JSON without any surrounding text, markdown fences, or explanations.
 
 Text: "${text}"
   `.trim();
@@ -102,23 +107,37 @@ Text: "${text}"
   }
 };
 
-const extractGigData = async (transcript, validPlatforms = []) => {
-  if (typeof transcript !== "string" || transcript.trim().length === 0) {
+const extractGigData = async (transcript, translatedTranscript, validPlatforms = []) => {
+  const sourceTranscript = typeof transcript === "string" ? transcript.trim() : "";
+  const englishTranscript = typeof translatedTranscript === "string" ? translatedTranscript.trim() : "";
+
+  if (!sourceTranscript && !englishTranscript) {
     return { platform: null, earnings: null, hours: null, sentiment: null };
   }
 
+  // Context for the AI about known platforms – kept to guide the model.
   const platformsContext = validPlatforms.length > 0
-    ? `The user's known platforms are: ${validPlatforms.join(", ")}. If the user mentions something that sounds like one of these (e.g. "बोला" sounds like "Ola"), map it exactly to the registered name.`
+    ? `Allowed platforms: [${validPlatforms.join(", ")}]. This list is exhaustive. For the platform field, you must return exactly one platform copied from this list or null.`
     : `Look for common gig platforms like Uber, Ola, Swiggy, Zomato, Rapido, Amazon Flex, etc.`;
 
   const prompt = `
-Extract gig work details from this transcript: "${transcript}"
+Extract gig work details from the user's message.
+
+Original transcript: "${sourceTranscript || englishTranscript}"
+English translation: "${englishTranscript || sourceTranscript}"
 
 Rules:
 1. Identify the platform (job/app). ${platformsContext}
 2. Identify earnings (money earned).
 3. Identify hours worked.
 4. Identify sentiment.
+5. Prefer the English translation when the original transcript looks phonetically noisy, but use both texts together.
+6. If the spoken or translated text sounds like one allowed platform, normalize it to that exact allowed platform name.
+7. Never invent a new platform, never return a misspelled platform, and never return a platform that is not in the allowed list.
+8. The platform value must exactly match one of the allowed platforms, including spelling and spacing.
+
+- If any field cannot be determined, set its value to null.
+- Return ONLY JSON without any extra text or markdown.
 
 Return ONLY JSON:
 {
@@ -127,14 +146,7 @@ Return ONLY JSON:
   "hours": "number or null",
   "sentiment": "positive|neutral|negative or null"
 }
-
-Note: Be extremely flexible with phonetic variations in Hinglish. 
-- "बोला पे" or "बोला" -> "Ola"
-- "ऊबर" or "उबर" -> "Uber"
-- "स्विग्गी" -> "Swiggy"
-- If they say "I did some swiggy today", platform is "Swiggy". 
-- If they say "made 500 on uber", platform is "Uber", earnings is 500.
-  `.trim();
+`.trim();
 
   let cleaned;
   try {
@@ -152,15 +164,17 @@ Note: Be extremely flexible with phonetic variations in Hinglish.
       return Number.isFinite(n) ? n : null;
     };
     return {
-      platform  : parsed.platform || null,
-      earnings  : parseNum(parsed.earnings),
-      hours     : parseNum(parsed.hours),
-      sentiment : parsed.sentiment || null,
+      platform: parsed.platform || null,
+      earnings: parseNum(parsed.earnings),
+      hours: parseNum(parsed.hours),
+      sentiment: parsed.sentiment || null,
     };
   } catch (error) {
     console.error("Failed to parse Gig Data JSON:", error.message);
     return { platform: null, earnings: null, hours: null, sentiment: null };
   }
+
+
 };
 
 module.exports = { analyzeSentiment, extractGigData };

@@ -19,7 +19,7 @@ const TYPE_COOLDOWNS = {
 };
 
 const GLOBAL_SPACING_MS = 5 * 60 * 1000; // 5 minutes between any nudges
-const DAILY_CAP = 10; // Max 10 nudges/day to allow for multiple celebratory/critical nudges
+const DAILY_CAP = 24; // Max 24 nudges/day to accommodate hourly updates + instant sparks
 
 // IST offset: UTC+5:30
 const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -51,11 +51,29 @@ const canSendNudge = async (userId, nudgeType) => {
   // ── Rule 2: Per-Type Cooldown ──────────────────────────────────────────
   const cooldownMs     = TYPE_COOLDOWNS[nudgeType] || 24 * 60 * 60 * 1000;
   const cooldownCutoff = new Date(Date.now() - cooldownMs);
+
+  // Check for any recent nudge of this type
   const recentSameType = await Nudge.findOne({
     userId,
     type     : nudgeType,
     createdAt: { $gte: cooldownCutoff },
   }).lean();
+
+  // SPECIAL RULE: If it's a daily_target nudge and the user dismissed it today,
+  // stop sending it entirely until tomorrow to avoid annoying the user.
+  if (nudgeType === "daily_target") {
+    const dayStart = getISTDayStart();
+    const dismissedToday = await Nudge.findOne({
+      userId,
+      type: "daily_target",
+      status: "dismissed",
+      createdAt: { $gte: dayStart },
+    }).lean();
+
+    if (dismissedToday) {
+      return { allowed: false, reason: `User dismissed daily_target nudge today. Blocking until tomorrow.` };
+    }
+  }
 
   if (recentSameType) {
     const sentMinsAgo   = Math.round((Date.now() - new Date(recentSameType.createdAt).getTime()) / 60000);

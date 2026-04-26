@@ -4,6 +4,7 @@ class VoiceChatState(TypedDict, total=False):
     language: str
     user_token: str
     user_input: str
+    translated_text: str
     lat: float
     lon: float
     jobs_list: List[str]

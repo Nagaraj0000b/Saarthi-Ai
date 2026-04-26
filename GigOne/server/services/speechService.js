@@ -85,6 +85,12 @@ const transcribeAudio = async (filePath, language = null) => {
     // Limit alternatives to prevent confusion, prioritize Hindi for Indian accents
     const alternatives = ["hi-IN", "en-IN"].filter(c => c !== primaryCode);
 
+    const defaultHints = [
+      "Earnings", "Earnings today", "Shift", "Rupees", "Hours",
+      "Worked for", "I made", "My earnings", "today's earnings",
+      "done for the day", "feeling good", "feeling tired"
+    ];
+
     const config = {
       languageCode: primaryCode,
       alternativeLanguageCodes: alternatives,
@@ -92,12 +98,7 @@ const transcribeAudio = async (filePath, language = null) => {
       model: "latest_short", // Optimized for short conversational bursts
       useEnhanced: true,
       speechContexts: [{
-        phrases: [
-          "Uber", "Ola", "Swiggy", "Zomato", "Rapido", "Porter", 
-          "Earnings", "Earnings today", "Shift", "Rupees", "Hours", 
-          "Worked for", "I made", "My earnings", "today's earnings",
-          "done for the day", "feeling good", "feeling tired"
-        ],
+        phrases: defaultHints,
         boost: 20.0 // Give high priority to gig-work vocabulary
       }]
     };
