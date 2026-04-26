@@ -41,6 +41,7 @@ const nudgeSchema = new mongoose.Schema(
       default: () => new Date(Date.now() + 24 * 60 * 60 * 1000), // 24 hours
     },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
+    isDemo: { type: Boolean, default: false },
   },
   { timestamps: true }
 );

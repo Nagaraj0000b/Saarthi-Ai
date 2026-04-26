@@ -81,7 +81,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 // If it is the first load, we just silently show them as cards to prevent crashing the OS.
                 if (!isFirstLoad) {
                     newNudges.forEach { nudge ->
-                        if (!currentIds.contains(nudge._id) && (nudge.priority == "urgent" || nudge.priority == "high")) {
+                        if (!currentIds.contains(nudge._id) && (nudge.priority == "urgent" || nudge.priority == "high" || nudge.isDemo)) {
                             com.gigone.saarthi.util.NotificationHelper.showNudgeNotification(
                                 ctx, 
                                 title = nudge.title, 

@@ -47,7 +47,7 @@ const SCENARIOS = {
     title: "📅 Tomorrow's Outlook",
     body: "Tomorrow is expected to be a high-demand day. Consider starting your shift 1 hour earlier!",
     emoji: "📅",
-    priority: "low",
+    priority: "normal",
   },
 };
 
@@ -88,9 +88,11 @@ async function run() {
     // Bypass Throttling by inserting directly into the collection
     const nudge = await Nudge.create({
       userId: targetUserId,
-      ...scenario,
-      status: "pending",
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Valid for 24h
+        ...scenario,
+        status: "pending",
+        expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000), // Valid for 24h
+        isDemo: true, // Mark as demo so UI always notifies
+
     });
 
     console.log("\n\x1b[32m====================================================\x1b[0m");

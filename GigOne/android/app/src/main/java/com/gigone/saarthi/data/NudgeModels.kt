@@ -14,7 +14,7 @@ data class NudgeItem(
     val priority: String = "normal",  // normal, high, urgent
     val status: String = "pending",   // pending, read, dismissed, expired
     val createdAt: String = "",
-    val metadata: Map<String, Any>? = null,
+    val isDemo: Boolean = false,
     val data: Map<String, Any>? = null
 )
 
