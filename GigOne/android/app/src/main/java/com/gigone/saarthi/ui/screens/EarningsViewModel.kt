@@ -49,7 +49,11 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
             try {
                 _entries.value = earningsApi.getEarnings().sortedByDescending { it.date }
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                }
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
@@ -67,9 +71,14 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
             try {
                 val newEntry = earningsApi.addEarning(request)
                 _entries.value = listOf(newEntry) + _entries.value
+                com.gigone.saarthi.util.EventBus.triggerRefresh() // Tell Dashboard to check for target nudges
                 onSuccess()
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                }
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
@@ -87,7 +96,11 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
                 _entries.value = _entries.value.map { if (it._id == id) updated else it }
                 onSuccess()
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                }
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
@@ -104,7 +117,11 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
                 earningsApi.deleteEarning(id)
                 _entries.value = _entries.value.filter { it._id != id }
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                }
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
             } catch (e: Exception) {
@@ -112,5 +129,17 @@ class EarningsViewModel(application: Application) : AndroidViewModel(application
                 android.util.Log.e("EarningsViewModel", "Delete failed", e)
             }
         }
+    }
+
+    private fun forceLogout() {
+        val app = getApplication<Application>()
+        // Clear the shared preferences to wipe the session
+        app.getSharedPreferences("saarthi_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        
+        // Force-restart the application to the Launcher Activity (SignIn)
+        val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        if (intent != null) app.startActivity(intent)
     }
 }

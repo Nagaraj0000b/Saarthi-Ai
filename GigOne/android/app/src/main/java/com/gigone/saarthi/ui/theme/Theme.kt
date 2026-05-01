@@ -15,10 +15,9 @@ fun SaarthiTheme(content: @Composable () -> Unit) {
     LaunchedEffect(Unit) {
         val savedTheme = TokenManager.getThemeMode(context)
         AppColors.instance = when(savedTheme) {
-            "Zomato Red" -> zomatoColors
-            "Professional Indigo" -> professionalWhiteColors
+            "Light" -> professionalWhiteColors
             "Dark" -> darkColors
-            else -> zomatoColors
+            else -> professionalWhiteColors
         }
     }
 

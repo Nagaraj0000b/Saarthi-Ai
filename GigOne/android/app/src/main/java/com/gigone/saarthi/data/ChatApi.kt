@@ -16,7 +16,7 @@ interface ChatApi {
      * Initializes a new check-in session.
      * Mirrors: POST /api/chat/start  { language, platforms, vehicles }
      */
-    @POST("chat/start")
+    @POST("chat-v2/start")
     suspend fun startSession(
         @Body body: StartSessionRequest
     ): StartSessionResponse
@@ -27,7 +27,7 @@ interface ChatApi {
      * Fields: audio (file), conversationId, language, platforms, skills
      */
     @Multipart
-    @POST("chat/reply")
+    @POST("chat-v2/reply")
     suspend fun sendAudioReply(
         @Part audio: MultipartBody.Part,
         @Part("conversationId") conversationId: RequestBody,
@@ -42,13 +42,13 @@ interface ChatApi {
      * Fetches the user's current burnout risk status.
      * Mirrors: GET /api/chat/burnout
      */
-    @GET("chat/burnout")
+    @GET("chat-v2/burnout")
     suspend fun getBurnoutStatus(): BurnoutStatus
 
-    @GET("chat/history")
+    @GET("chat-v2/history")
     suspend fun getHistory(): List<ChatHistoryLog>
 
-    @DELETE("chat/{id}")
+    @DELETE("chat-v2/{id}")
     suspend fun deleteSession(@Path("id") id: String)
 
     /**

@@ -23,27 +23,42 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.gigone.saarthi.ui.theme.AppColors
-import com.gigone.saarthi.ui.theme.zomatoColors
 import com.gigone.saarthi.ui.theme.professionalWhiteColors
 import com.gigone.saarthi.ui.theme.darkColors
 import com.gigone.saarthi.util.TokenManager
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
+fun ProfileScreen(
+    navController: NavController,
+    onLogout: () -> Unit,
+    vm: ProfileViewModel = viewModel()
+) {
     val context = LocalContext.current
     
-    // We use a LaunchedEffect to re-read from SharedPreferences whenever this screen becomes active again
+    // Fetch profile from backend on launch to ensure synchronization
+    LaunchedEffect(Unit) {
+        vm.fetchProfile()
+    }
+    
+    // We use a collectAsState or simple re-read for names/emails. 
+    // Since vm.fetchProfile() updates TokenManager, we can observe change or simply re-read.
     var userName by remember { mutableStateOf(TokenManager.getUserName(context)) }
     var userPhone by remember { mutableStateOf(TokenManager.getUserPhone(context)) }
     var userEmail by remember { mutableStateOf(TokenManager.getUserEmail(context)) }
 
-    LaunchedEffect(Unit) {
-        userName = TokenManager.getUserName(context)
-        userPhone = TokenManager.getUserPhone(context)
-        userEmail = TokenManager.getUserEmail(context)
+    // Re-read when viewModel finishes fetching or on initial launch
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
+    LaunchedEffect(isLoading) {
+        if (!isLoading) {
+            userName = TokenManager.getUserName(context)
+            userPhone = TokenManager.getUserPhone(context)
+            userEmail = TokenManager.getUserEmail(context)
+        }
     }
 
     val scrollState = rememberScrollState()
@@ -188,7 +203,7 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
             ProfileMenuItem(
                 icon = Icons.Outlined.Palette,
                 title = "Theme",
-                subtitle = "Switch between Zomato and Professional themes",
+                subtitle = "Switch between Light and Dark modes",
                 onClick = { showThemeDialog = true }
             )
 
@@ -209,7 +224,7 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
                     title = { Text("Select Theme", color = AppColors.TextPrimary) },
                     text = {
                         Column {
-                            val themes = listOf("Zomato Red", "Professional Indigo", "Dark")
+                            val themes = listOf("Light", "Dark")
                             themes.forEach { theme ->
                                 Row(
                                     modifier = Modifier
@@ -217,8 +232,7 @@ fun ProfileScreen(navController: NavController, onLogout: () -> Unit) {
                                         .clickable {
                                             TokenManager.saveThemeMode(context, theme)
                                             AppColors.instance = when(theme) {
-                                                "Zomato Red" -> zomatoColors
-                                                "Professional Indigo" -> professionalWhiteColors
+                                                "Light" -> professionalWhiteColors
                                                 else -> darkColors
                                             }
                                             showThemeDialog = false

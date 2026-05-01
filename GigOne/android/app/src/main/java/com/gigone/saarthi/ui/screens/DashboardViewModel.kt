@@ -44,13 +44,76 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
     private val chatApi: ChatApi by lazy {
         ApiClient.buildRetrofit(ctx).create(ChatApi::class.java)
     }
+    private val nudgeApi: com.gigone.saarthi.data.NudgeApi by lazy {
+        ApiClient.buildRetrofit(ctx).create(com.gigone.saarthi.data.NudgeApi::class.java)
+    }
     private val voiceRecorder = VoiceRecorder(ctx)
     private val ttsPlayer = TtsPlayer(ctx)
     private val fusedLocationClient: FusedLocationProviderClient by lazy {
         LocationServices.getFusedLocationProviderClient(ctx)
     }
 
+    init {
+        com.gigone.saarthi.util.NotificationHelper.createNotificationChannel(ctx)
+        loadNudges()
+        
+        viewModelScope.launch {
+            com.gigone.saarthi.util.EventBus.refreshDataEvent.collect {
+                loadNudges()
+            }
+        }
+    }
+
     // ─── State ──────────────────────────────────────────────────────────────
+    private val _activeNudges = MutableStateFlow<List<com.gigone.saarthi.data.NudgeItem>>(emptyList())
+    val activeNudges: StateFlow<List<com.gigone.saarthi.data.NudgeItem>> = _activeNudges.asStateFlow()
+
+    private var isFirstLoad = true
+
+    fun loadNudges() {
+        viewModelScope.launch {
+            try {
+                // Filter out duplicates by TYPE (e.g., only 1 surge alert, 1 weather alert at a time)
+                val newNudges = nudgeApi.getActiveNudges().distinctBy { it.type }
+                val currentIds = _activeNudges.value.map { it._id }.toSet()
+                
+                newNudges.forEach { nudge ->
+                    // Trigger notification if:
+                    // 1. It's a new nudge AND it's a demo nudge (Bypass isFirstLoad and priority)
+                    // 2. It's a new nudge AND NOT first load AND it's urgent/high priority
+                    val isNew = !currentIds.contains(nudge._id)
+                    val shouldNotify = isNew && (nudge.isDemo || (!isFirstLoad && (nudge.priority == "urgent" || nudge.priority == "high" || nudge.priority == "normal")))
+                    
+                    if (shouldNotify) {
+                        com.gigone.saarthi.util.NotificationHelper.showNudgeNotification(
+                            ctx, 
+                            title = nudge.title, 
+                            body = nudge.body,
+                            id = nudge._id.hashCode()
+                        )
+                    }
+                }
+                
+                _activeNudges.value = newNudges
+                isFirstLoad = false
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Failed to fetch nudges", e)
+            }
+        }
+    }
+
+    fun dismissNudge(id: String) {
+        viewModelScope.launch {
+            try {
+                // Optimistic UI update
+                _activeNudges.value = _activeNudges.value.filter { it._id != id }
+                nudgeApi.markRead(id)
+            } catch (e: Exception) {
+                android.util.Log.e("DashboardViewModel", "Failed to dismiss nudge", e)
+            }
+        }
+    }
+
     private val _messages = MutableStateFlow<List<ChatMessage>>(
         listOf(ChatMessage("assistant", "Ready when you are! Hold the mic to speak."))
     )
@@ -125,6 +188,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
 
     /** Fetch job recommendations based on current location. */
     fun loadRecommendations(onLocationDisabled: ((IntentSenderRequest) -> Unit)? = null) {
+        // Guard: drop duplicate calls if a fetch is already in-flight
+        if (_isRecommendationLoading.value) return
+
         viewModelScope.launch {
             _isRecommendationLoading.value = true
             _recommendationError.value = null
@@ -163,6 +229,7 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
     }
 
+
     private suspend fun proceedWithRecommendations(loc: Location?) {
         if (loc == null) {
             _recommendationError.value = if (!hasLocationPermission()) {
@@ -174,12 +241,16 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         }
 
         try {
-            val jobsStr = TokenManager.getJobs(ctx).joinToString(",")
-            val skillsStr = TokenManager.getSkills(ctx).joinToString(",")
+            val jobsStr = TokenManager.getJobs(ctx).joinToString(",") { it.platform }
+            val skillsStr = TokenManager.getSkills(ctx).joinToString(",") { it.name }
             val response = chatApi.getJobRecommendations(loc.latitude, loc.longitude, jobsStr, skillsStr)
             _recommendation.value = response.data
         } catch (e: HttpException) {
-            _errorMessage.value = "Server error, please try again later."
+            if (e.code() == 401) {
+                forceLogout()
+            } else {
+                _errorMessage.value = "Server error, please try again later."
+            }
         } catch (e: IOException) {
             _errorMessage.value = "Network error, please check your connection."
         } catch (e: Exception) {
@@ -196,8 +267,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 _errorMessage.value = null
                 
                 val location = getCurrentLocation()
-                val jobs = TokenManager.getJobs(ctx).toList()
-                val skills = TokenManager.getSkills(ctx).toList()
+                val jobs = TokenManager.getJobs(ctx).map { it.platform }
+                val skills = TokenManager.getSkills(ctx).map { it.name }
                 
                 val body = com.gigone.saarthi.data.StartSessionRequest(
                     language = _selectedLanguage.value,
@@ -214,8 +285,12 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val token = TokenManager.getToken(ctx) ?: ""
                 ttsPlayer.speak(data.reply, _selectedLanguage.value, token)
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
-                _messages.value = listOf(ChatMessage("assistant", "⚠️ Could not connect to server. Try again."))
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                    _messages.value = listOf(ChatMessage("assistant", "⚠️ Could not connect to server. Try again."))
+                }
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
                 _messages.value = listOf(ChatMessage("assistant", "⚠️ Network error. Check your internet."))
@@ -278,8 +353,8 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val convIdBody = conversationId!!.toRequestBody("text/plain".toMediaType())
                 val langBody = _selectedLanguage.value.toRequestBody("text/plain".toMediaType())
                 
-                val jobs = TokenManager.getJobs(ctx).joinToString(",")
-                val skills = TokenManager.getSkills(ctx).joinToString(",")
+                val jobs = TokenManager.getJobs(ctx).joinToString(",") { it.platform }
+                val skills = TokenManager.getSkills(ctx).joinToString(",") { it.name }
                 val jobsBody = jobs.toRequestBody("text/plain".toMediaType())
                 val skillsBody = skills.toRequestBody("text/plain".toMediaType())
 
@@ -295,6 +370,9 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                     latBody,
                     lonBody
                 )
+
+                // Trigger a check for new nudges now that the AI has processed our state
+                loadNudges()
 
                 // Replace the "Processing" bubble with real transcription + reply
                 val current = _messages.value.dropLast(1)
@@ -315,11 +393,15 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 audioFile.delete()
 
             } catch (e: HttpException) {
-                _errorMessage.value = "Server error, please try again later."
-                val current = _messages.value.dropLast(1)
-                _messages.value = current + ChatMessage(
-                    "assistant", "⚠️ Server error."
-                )
+                if (e.code() == 401) {
+                    forceLogout()
+                } else {
+                    _errorMessage.value = "Server error, please try again later."
+                    val current = _messages.value.dropLast(1)
+                    _messages.value = current + ChatMessage(
+                        "assistant", "⚠️ Server error."
+                    )
+                }
                 audioFile.delete()
             } catch (e: IOException) {
                 _errorMessage.value = "Network error, please check your connection."
@@ -425,5 +507,18 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
         super.onCleared()
         ttsPlayer.shutdown()
         voiceRecorder.cancel()
+    }
+
+    private fun forceLogout() {
+        val app = getApplication<Application>()
+        // Aggressively clear common SharedPreferences to ensure the token is wiped
+        app.getSharedPreferences("saarthi_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        app.getSharedPreferences("auth_prefs", android.content.Context.MODE_PRIVATE).edit().clear().apply()
+        
+        // Force-restart the application to the Launcher Activity (SignIn)
+        val intent = app.packageManager.getLaunchIntentForPackage(app.packageName)?.apply {
+            addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+        }
+        if (intent != null) app.startActivity(intent)
     }
 }

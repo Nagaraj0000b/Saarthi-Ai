@@ -33,6 +33,7 @@ import com.gigone.saarthi.ui.theme.AppColors
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import java.util.TimeZone
 
 import com.gigone.saarthi.util.getJobVisual
 
@@ -311,22 +312,21 @@ private fun CompactEarningCard(entry: EarningEntry, onEdit: () -> Unit, onDelete
 }
 
 // ═══════════════════════ EARNING DIALOG ═══════════════════════
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, String, Float, Float) -> Unit) {
-    val jobs = listOf(
-        "Uber", "Ola", "Swiggy", "Zomato", "Blinkit", "Zepto", "Rapido", 
-        "Amazon Flex", "BigBasket", "Delhivery", "BluSmart", "Dunzo", 
-        "Namma Yatri", "BlueDart", "JioMart", "InDriver",
-        "Urban Company", "Local Plumber", "Local Electrician", "Home Cleaning Co",
-        "Elderly Care", "Pet Walker",
-        "DataEntry Inc", "SupportHero", "Virtual Assistant Hub", "Translation Pro",
-        "Other"
-    )
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val userJobs = remember {
+        val jobs = com.gigone.saarthi.util.TokenManager.getJobs(context).map { it.platform }.distinct()
+        if (jobs.isNotEmpty()) jobs else listOf("Uber", "Zomato", "Swiggy", "Other")
+    }
 
-    var job by remember { mutableStateOf(entry?.job ?: "Uber") }
+    var job by remember { mutableStateOf(entry?.job ?: userJobs.firstOrNull() ?: "") }
+    var jobExpanded by remember { mutableStateOf(false) }
     var amount by remember { mutableStateOf(entry?.amount?.toInt()?.toString() ?: "") }
     var hours by remember { mutableStateOf(entry?.hours?.toString() ?: "") }
     var date by remember { mutableStateOf(entry?.date?.take(10) ?: SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())) }
+    var errorMsg by remember { mutableStateOf<String?>(null) }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -352,38 +352,58 @@ fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, 
         },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
-                // Job selector — cycling through list
+                // Job selector — Searchable Dropdown
+                val filteredJobs = userJobs.filter { it.contains(job, ignoreCase = true) }
                 val visual = getJobVisual(job)
-                OutlinedTextField(
-                    value = job,
-                    onValueChange = {},
-                    readOnly = true,
-                    label = { Text("Job (Tap to change)", color = AppColors.TextMuted) },
-                    leadingIcon = {
-                        Icon(visual.icon, contentDescription = null, tint = visual.color, modifier = Modifier.size(20.dp))
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            val next = jobs[(jobs.indexOf(job) + 1) % jobs.size]
-                            job = next
+
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = job,
+                        onValueChange = {
+                            job = it
+                            jobExpanded = true
+                            errorMsg = null
                         },
-                    shape = RoundedCornerShape(14.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = AppColors.TextPrimary,
-                        unfocusedTextColor = AppColors.TextPrimary,
-                        unfocusedBorderColor = AppColors.BorderSubtle,
-                        focusedBorderColor = AppColors.Primary,
-                        focusedContainerColor = AppColors.BgDeep,
-                        unfocusedContainerColor = AppColors.BgDeep
+                        label = { Text("Platform", color = AppColors.TextMuted) },
+                        leadingIcon = {
+                            Icon(visual.icon, contentDescription = null, tint = visual.color, modifier = Modifier.size(20.dp))
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(14.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = AppColors.TextPrimary,
+                            unfocusedTextColor = AppColors.TextPrimary,
+                            unfocusedBorderColor = AppColors.BorderSubtle,
+                            focusedBorderColor = AppColors.Primary,
+                            focusedContainerColor = AppColors.BgDeep,
+                            unfocusedContainerColor = AppColors.BgDeep
+                        )
                     )
-                )
+                    DropdownMenu(
+                        expanded = jobExpanded && filteredJobs.isNotEmpty(),
+                        onDismissRequest = { jobExpanded = false },
+                        modifier = Modifier.background(AppColors.BgCard).fillMaxWidth(0.7f).heightIn(max = 200.dp),
+                        properties = androidx.compose.ui.window.PopupProperties(focusable = false)
+                    ) {
+                        filteredJobs.forEach { selectionOption ->
+                            DropdownMenuItem(
+                                text = { Text(selectionOption, color = AppColors.TextPrimary) },
+                                onClick = {
+                                    job = selectionOption
+                                    jobExpanded = false
+                                }
+                            )
+                        }
+                    }
+                }
+
                 Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                     OutlinedTextField(
                         value = amount,
-                        onValueChange = { amount = it },
+                        onValueChange = { amount = it; errorMsg = null },
                         label = { Text("Amount (₹)", color = AppColors.TextMuted) },
                         leadingIcon = { Text("₹", color = AppColors.Accent, fontWeight = FontWeight.Bold) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -397,9 +417,10 @@ fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, 
                     )
                     OutlinedTextField(
                         value = hours,
-                        onValueChange = { hours = it },
+                        onValueChange = { hours = it; errorMsg = null },
                         label = { Text("Hours", color = AppColors.TextMuted) },
                         leadingIcon = { Icon(Icons.Outlined.Schedule, contentDescription = null, tint = AppColors.TextMuted, modifier = Modifier.size(18.dp)) },
+                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.Number),
                         modifier = Modifier.weight(1f),
                         shape = RoundedCornerShape(14.dp),
                         colors = OutlinedTextFieldDefaults.colors(
@@ -412,13 +433,29 @@ fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, 
                         )
                     )
                 }
+
+                if (errorMsg != null) {
+                    Text(errorMsg!!, color = AppColors.Error, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
+                }
             }
         },
         confirmButton = {
             Button(
                 onClick = {
-                    val amt = amount.toFloatOrNull() ?: return@Button
-                    val hrs = hours.toFloatOrNull() ?: return@Button
+                    val amt = amount.toFloatOrNull()
+                    val hrs = hours.toFloatOrNull()
+                    if (job.isBlank()) {
+                        errorMsg = "Please enter a platform"
+                        return@Button
+                    }
+                    if (amt == null || amt <= 0) {
+                        errorMsg = "Please enter a valid amount"
+                        return@Button
+                    }
+                    if (hrs == null || hrs <= 0) {
+                        errorMsg = "Please enter valid hours"
+                        return@Button
+                    }
                     onSave(date, job, amt, hrs)
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = AppColors.Primary),
@@ -438,7 +475,9 @@ fun EarningDialog(entry: EarningEntry?, onDismiss: () -> Unit, onSave: (String, 
 fun formatDate(isoString: String): String {
     try {
         val parser = SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'", Locale.getDefault())
+        parser.timeZone = TimeZone.getTimeZone("UTC")
         val formatter = SimpleDateFormat("dd MMM, yyyy", Locale.getDefault())
+        formatter.timeZone = TimeZone.getDefault()
         val date = parser.parse(isoString) ?: return isoString
         return formatter.format(date)
     } catch (e: Exception) {

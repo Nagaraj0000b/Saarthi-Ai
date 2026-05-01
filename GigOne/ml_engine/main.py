@@ -1,31 +1,9 @@
-"""
-Saarthi — Machine Learning Inference API
-==============================================
-This script provides a web service (API) that allows other parts of 
-the application to request earning predictions from the 
-trained machine learning model.
-
-Technical Terms Defined:
------------------------
-- API (Application Programming Interface): A way for different computer 
-  programs to talk to each other.
-- Endpoint: A specific web address (like /recommend) where the API 
-  receives requests.
-- FastAPI: A modern, fast tool used to build web APIs with Python.
-- Pydantic: A tool used to define the structure of data (schemas) 
-  coming into or going out of the API.
-- Uvicorn: A lightning-fast server that runs the FastAPI application.
-- JSON (JavaScript Object Notation): A simple text format for storing 
-  and transporting data.
-- Inference: Using a trained model to make a prediction for a new request.
-- Schema: A blueprint or template that defines the structure of data.
-"""
-
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Body
 from pydantic import BaseModel
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 import xgboost as xgb
 import pandas as pd
+import numpy as np
 import pickle
 import json
 import os
@@ -38,38 +16,36 @@ import uvicorn
 BASE_DIR = os.path.dirname(__file__)
 MODEL_DIR = os.path.join(BASE_DIR, "models")
 
-MODEL_PATH = os.path.join(MODEL_DIR, "gigone_xgb_model.json")
-ENCODERS_PATH = os.path.join(MODEL_DIR, "label_encoders.pkl")
-METADATA_PATH = os.path.join(MODEL_DIR, "model_metadata.json")
+# NEW MODELS
+MODEL_PATH = os.path.join(MODEL_DIR, "saarthi_earnings_model.json")
+BURNOUT_MODEL_PATH = os.path.join(MODEL_DIR, "saarthi_wellbeing_model.json")
+ENCODERS_PATH = os.path.join(MODEL_DIR, "saarthi_encoders.pkl")
+METADATA_PATH = os.path.join(MODEL_DIR, "saarthi_model_metadata.json")
 
 # Initialize the web application
-app = FastAPI(title="GigOne Saarthi ML Engine", version="1.0.0")
+app = FastAPI(title="GigOne Saarthi ML Engine", version="2.0.0")
 
-# Global variables to store the loaded model artifacts
-model = None
+model_earnings = None
+model_burnout = None
 encoders = None
 metadata = None
 
+from voice_chat_v2.graph import create_graph
+graph_app = create_graph()
+
 @app.on_event("startup")
 def load_artifacts():
-    """
-    Runs automatically when the API starts. Loads the trained model, 
-    categorical encoders, and metadata from the disk.
-    
-    Inputs: None
-    Outputs: None (sets global variables)
-    """
-    global model, encoders, metadata
+    global model_earnings, model_burnout, encoders, metadata
     try:
-        # Load the binary XGBoost model file
-        model = xgb.Booster()
-        model.load_model(MODEL_PATH)
+        model_earnings = xgb.Booster()
+        model_earnings.load_model(MODEL_PATH)
         
-        # Load the mapping tools (encoders) used for text categories
+        model_burnout = xgb.Booster()
+        model_burnout.load_model(BURNOUT_MODEL_PATH)
+        
         with open(ENCODERS_PATH, "rb") as f:
             encoders = pickle.load(f)
             
-        # Load information about feature names and accuracy metrics
         with open(METADATA_PATH, "r") as f:
             metadata = json.load(f)
             
@@ -82,221 +58,186 @@ def load_artifacts():
 #                       DATA MODELS (SCHEMAS)
 # ══════════════════════════════════════════════════════════════
 
+class JobInfo(BaseModel):
+    platform: str
+    job_type: str
+    domain: str
+
+class SkillInfo(BaseModel):
+    name: str
+    experience: int
+    level: str
+
 class UserContext(BaseModel):
-    """
-    Template defining the information required about a user to 
-    make a prediction.
-    """
-    hour: int
-    day: int
-    weather: str
-    temp: float
-    traffic: str
-    congestion_percent: int
-    registered_jobs: List[str] = []
-    skill_bike: int = 0
-    skill_car: int = 0
-    skill_heavy: int = 0
-    skill_clean: int = 0
-    skill_trade: int = 0
-    skill_care: int = 0
-    skill_digital: int = 0
-    skill_support: int = 0
-    hours_today: float
-    hours_last_3_days: float
-    consecutive_days: int
-    mood_score: float
-    burnout_risk: str
+    gender: str = "Male"
+    city: str = "Bangalore"
+    temperature_celsius: float = 25.0
+    humidity_percentage: float = 50.0
+    congestion_percent: float = 0.0
+    traffic_level: str = "clear"
+    moodLabel: str = "neutral"
+    moodScore: float = 0.0
+    hours_today: float = 0.0
+    hours_last_3_days: float = 0.0
+    consecutive_days: int = 0
+    registered_jobs: List[JobInfo] = []
+    skills: List[SkillInfo] = []
 
 class Recommendation(BaseModel):
-    """
-    Template defining the prediction result sent back to the user.
-    """
     job: str
     job_type: str
     predicted_earning: float
     is_compatible: bool
 
+class BurnoutPrediction(BaseModel):
+    burnout_risk_level: str
+    confidence_score: float
+
 # ══════════════════════════════════════════════════════════════
 #                       SERVICE LOGIC
 # ══════════════════════════════════════════════════════════════
 
-# Mapping specific jobs to their broader categories
-JOB_TO_TYPE = {
-    "Uber": "Ride hailing drivers (cab+ bike)",
-    "Ola": "Ride hailing drivers (cab+ bike)",
-    "BluSmart": "Ride hailing drivers (cab+ bike)",
-    "Namma Yatri": "Ride hailing drivers (cab+ bike)",
-    "InDriver": "Ride hailing drivers (cab+ bike)",
-    "Rapido": "Ride hailing drivers (cab+ bike)",
-    "Swiggy": "Ride hailing instant delivery",
-    "Zomato": "Ride hailing instant delivery",
-    "Blinkit": "Ride hailing instant delivery",
-    "Zepto": "Ride hailing instant delivery",
-    "Amazon Flex": "Delivery workers in General",
-    "Delhivery": "Delivery workers in General",
-    "BlueDart": "Delivery workers in General",
-    "Dunzo": "Delivery workers in General",
-    "BigBasket": "Delivery workers in General",
-    "JioMart": "Delivery workers in General",
-    "Urban Company": "On Demand home based services",
-    "Local Plumber": "On Demand home based services",
-    "Local Electrician": "On Demand home based services",
-    "Home Cleaning Co": "On Demand home based services",
-    "Elderly Care": "On Demand home based services",
-    "Pet Walker": "On Demand home based services",
-    "DataEntry Inc": "Remote service providers",
-    "SupportHero": "Remote service providers",
-    "Virtual Assistant Hub": "Remote service providers",
-    "Translation Pro": "Remote service providers",
-}
+def encode_safe(col_name, val):
+    le = encoders[col_name]
+    val_str = str(val)
+    if val_str in le.classes_:
+        return le.transform([val_str])[0]
+    return le.transform([le.classes_[0]])[0]
 
-# Mapping jobs to the skills required to perform them
-COMPATIBILITY = {
-    "Uber":         ["skill_car", "skill_bike"],
-    "Ola":          ["skill_car", "skill_bike"],
-    "BluSmart":     ["skill_car"],
-    "Namma Yatri":  ["skill_car", "skill_bike"],
-    "InDriver":     ["skill_car", "skill_bike"],
-    "Rapido":       ["skill_bike"],
-    "Swiggy":       ["skill_bike"],
-    "Zomato":       ["skill_bike"],
-    "Blinkit":      ["skill_bike"],
-    "Zepto":        ["skill_bike"],
-    "BigBasket":    ["skill_bike", "skill_heavy"],
-    "JioMart":      ["skill_bike", "skill_heavy"],
-    "Amazon Flex":  ["skill_bike", "skill_car", "skill_heavy"],
-    "Delhivery":    ["skill_bike", "skill_heavy"],
-    "BlueDart":     ["skill_bike", "skill_heavy"],
-    "Dunzo":        ["skill_bike"],
-    "Urban Company":   ["skill_clean", "skill_trade", "skill_care"],
-    "Local Plumber":   ["skill_trade"],
-    "Local Electrician":["skill_trade"],
-    "Home Cleaning Co":["skill_clean"],
-    "Elderly Care":   ["skill_care"],
-    "Pet Walker":     ["skill_care"],
-    "DataEntry Inc":         ["skill_digital"],
-    "SupportHero":           ["skill_support"],
-    "Virtual Assistant Hub": ["skill_digital", "skill_support"],
-    "Translation Pro":       ["skill_digital", "skill_support"],
-}
-
-def predict_for_job(job_name: str, context: UserContext) -> Recommendation:
-    """
-    Calculates a single earning prediction for a specific job name.
+def build_input_data(job_info: JobInfo, context: UserContext):
+    primary_skill = context.skills[0].name if context.skills else "Navigation"
+    skill_level = context.skills[0].level if context.skills else "Low"
+    exp_years = context.skills[0].experience if context.skills else 0
     
-    Inputs:
-    - job_name (string): Name of the job platform.
-    - context (UserContext): Current environment and user state.
-    
-    Outputs:
-    - recommendation (Recommendation): The prediction result.
-    """
-    job_type = JOB_TO_TYPE.get(job_name, "Other")
-    
-    user_skills = {
-        "skill_bike": context.skill_bike,
-        "skill_car": context.skill_car,
-        "skill_heavy": context.skill_heavy,
-        "skill_clean": context.skill_clean,
-        "skill_trade": context.skill_trade,
-        "skill_care": context.skill_care,
-        "skill_digital": context.skill_digital,
-        "skill_support": context.skill_support
-    }
-    
-    # Check if the user has the required skills for this job
-    required_skills_list = COMPATIBILITY.get(job_name, [])
-    is_compatible = any(user_skills[skill] == 1 for skill in required_skills_list)
-    
-    # Organize the data into the exact order the model expects
-    input_data = {
-        "job": encoders["job"].transform([job_name])[0],
-        "job_type": encoders["job_type"].transform([job_type])[0],
-        "weather": encoders["weather"].transform([context.weather])[0],
-        "traffic": encoders["traffic"].transform([context.traffic.lower()])[0],
-        "burnout_risk": encoders["burnout_risk"].transform([context.burnout_risk.lower()])[0],
-        "hour": context.hour,
-        "day": context.day,
-        "temp": context.temp,
+    return {
+        "gender": encode_safe("gender", context.gender),
+        "domain": encode_safe("domain", job_info.domain if job_info.domain else "Location_Transport_Delivery"),
+        "job_type": encode_safe("job_type", job_info.job_type),
+        "platform": encode_safe("platform", job_info.platform),
+        "domain_experience_years": exp_years,
+        "skill_level": encode_safe("skill_level", skill_level),
+        "is_location_based": 1 if "Location" in str(job_info.domain) else 0,
+        "city": encode_safe("city", context.city),
+        "temperature_celsius": context.temperature_celsius,
+        "humidity_percentage": context.humidity_percentage,
         "congestion_percent": context.congestion_percent,
-        "is_compatible": 1 if is_compatible else 0,
+        "traffic_level": encode_safe("traffic_level", context.traffic_level),
+        "moodLabel": encode_safe("moodLabel", context.moodLabel),
+        "moodScore": context.moodScore,
         "hours_today": context.hours_today,
         "hours_last_3_days": context.hours_last_3_days,
-        "consecutive_days": context.consecutive_days,
-        "mood_score": context.mood_score
+        "consecutive_days": context.consecutive_days
     }
-    # Append the skills as numbers
-    input_data.update(user_skills)
+
+def predict_for_job(job_info: JobInfo, context: UserContext) -> Recommendation:
+    input_data = build_input_data(job_info, context)
     
-    # Create a simple table (DataFrame) for the prediction
     data_frame = pd.DataFrame([input_data])
-    ordered_data_frame = data_frame[metadata["feature_columns"]]
+    ordered_data_frame = data_frame[metadata["features_used"]]
     
-    # Use the XGBoost tool to make the prediction
     prediction_matrix = xgb.DMatrix(ordered_data_frame)
-    predicted_values = model.predict(prediction_matrix)
+    predicted_values = model_earnings.predict(prediction_matrix)
     
     return Recommendation(
-        job=job_name,
-        job_type=job_type,
+        job=job_info.platform,
+        job_type=job_info.job_type,
         predicted_earning=float(predicted_values[0]),
-        is_compatible=is_compatible
+        is_compatible=True
     )
-
-# ══════════════════════════════════════════════════════════════
-#                       ENDPOINTS
-# ══════════════════════════════════════════════════════════════
 
 @app.get("/health")
 def health():
-    """
-    Simple check to see if the API is running correctly.
-    
-    Inputs: None
-    Outputs: Status message and model accuracy score.
-    """
-    return {"status": "healthy", "model_accuracy": metadata["metrics"]["r2"]}
+    return {"status": "healthy", "model_accuracy": metadata["earnings_metrics"]["r2"]}
 
 @app.post("/recommend", response_model=List[Recommendation])
 def get_recommendations(context: UserContext):
-    """
-    Receives user context and returns a list of job recommendations.
-    
-    The list is filtered to only include:
-    1. Jobs that the user is registered for (if provided).
-    2. Jobs that are compatible with the user's skills.
-    
-    The results are sorted by predicted earnings in descending order.
-    
-    Inputs:
-    - context (UserContext): The current situation and user profile.
-    
-    Outputs:
-    - recommendations (List): A list of potential jobs and their predicted earnings.
-    """
     try:
         recommendation_results = []
         
-        # Determine which jobs to consider
-        target_jobs = context.registered_jobs if context.registered_jobs else list(JOB_TO_TYPE.keys())
-        
-        for job_platform in target_jobs:
-            if job_platform not in JOB_TO_TYPE:
-                continue
-                
-            result = predict_for_job(job_platform, context)
+        if not context.registered_jobs:
+             return []
+             
+        for job_info in context.registered_jobs:
+            result = predict_for_job(job_info, context)
+            recommendation_results.append(result)
             
-            # Only include compatible jobs
-            if result.is_compatible:
-                recommendation_results.append(result)
-            
-        # Sort the results so the highest earnings are at the top
         recommendation_results.sort(key=lambda x: x.predicted_earning, reverse=True)
         return recommendation_results
+    except Exception as error_message:
+        print("ML ENGINE ERROR:", str(error_message))
+        raise HTTPException(status_code=500, detail=str(error_message))
+
+@app.post("/burnout", response_model=BurnoutPrediction)
+def get_burnout_risk(context: UserContext):
+    try:
+        if not context.registered_jobs:
+            # Fallback if no jobs registered
+            job_info = JobInfo(platform="Other", job_type="Other", domain="Location_Transport_Delivery")
+        else:
+            job_info = context.registered_jobs[0]
+
+        input_data = build_input_data(job_info, context)
+        data_frame = pd.DataFrame([input_data])
+        ordered_data_frame = data_frame[metadata["features_used"]]
+        
+        prediction_matrix = xgb.DMatrix(ordered_data_frame)
+        pred_probs = model_burnout.predict(prediction_matrix)[0]
+        
+        burnout_label_idx = int(np.argmax(pred_probs))
+
+        # Use the loaded burnout LabelEncoder to retrieve the class name
+        le_burnout = encoders.get('burnout_risk')
+        if le_burnout:
+            burnout_label = le_burnout.classes_[burnout_label_idx]
+        else:
+            # Fallback if encoder is missing, though it should be in saarthi_encoders.pkl
+            burnout_map = {0: 'High', 1: 'Low', 2: 'Medium'}
+            burnout_label = burnout_map.get(burnout_label_idx, "Unknown")
+
+        confidence = float(pred_probs[burnout_label_idx])
+        
+        return BurnoutPrediction(
+            burnout_risk_level=burnout_label,
+            confidence_score=confidence
+        )
+    except Exception as error_message:
+        print("ML ENGINE BURNOUT ERROR:", str(error_message))
+        raise HTTPException(status_code=500, detail=str(error_message))
+
+@app.post("/chat/turn")
+def process_chat_turn(payload: Dict[str, Any] = Body(...)):
+    try:
+        state_payload = dict(payload)
+        legacy_data = state_payload.get("extracted_data") or state_payload.get("extractedData") or {}
+
+        def pick_first(*values):
+            for value in values:
+                if value is not None and value != "":
+                    return value
+            return None
+
+        state_payload["selected_platform"] = pick_first(
+            state_payload.get("selected_platform"),
+            legacy_data.get("selected_platform"),
+            legacy_data.get("platform"),
+            legacy_data.get("job"),
+        )
+        state_payload["expected_earnings"] = pick_first(
+            state_payload.get("expected_earnings"),
+            legacy_data.get("expected_earnings"),
+            legacy_data.get("earnings"),
+            legacy_data.get("amount"),
+        )
+        state_payload["hours_worked"] = pick_first(
+            state_payload.get("hours_worked"),
+            legacy_data.get("hours_worked"),
+            legacy_data.get("hours"),
+        )
+
+        new_state = graph_app.invoke(state_payload)
+        return new_state
     except Exception as error_message:
         raise HTTPException(status_code=500, detail=str(error_message))
 
 if __name__ == "__main__":
-    # Start the web server
     uvicorn.run(app, host="0.0.0.0", port=8000)

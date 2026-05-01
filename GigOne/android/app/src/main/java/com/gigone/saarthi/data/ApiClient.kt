@@ -17,6 +17,8 @@ import java.util.concurrent.TimeUnit
  */
 object ApiClient {
 
+    private var cachedRetrofit: Retrofit? = null
+
     /**
      * Interceptor that injects JWT token from SharedPrefs into every request.
      * Mirrors chatApi.js `getHeaders()`.
@@ -32,6 +34,12 @@ object ApiClient {
     }
 
     fun buildRetrofit(context: Context): Retrofit {
+        // Use applicationContext to avoid leaking activity contexts
+        val appContext = context.applicationContext
+
+        // Return cached instance if it exists to avoid recreating the client and interceptors
+        cachedRetrofit?.let { return it }
+
         val baseUrl = BuildConfig.API_URL + "/"
 
         val logging = HttpLoggingInterceptor().apply {
@@ -39,24 +47,25 @@ object ApiClient {
         }
 
         val client = OkHttpClient.Builder()
-            .addInterceptor(AuthInterceptor(context.applicationContext))
+            .addInterceptor(AuthInterceptor(appContext))
             .addInterceptor(logging)
             .connectTimeout(60, TimeUnit.SECONDS)
             .readTimeout(60, TimeUnit.SECONDS)
             .writeTimeout(60, TimeUnit.SECONDS)
             .build()
 
-        return Retrofit.Builder()
+        val retrofit = Retrofit.Builder()
             .baseUrl(baseUrl)
             .client(client)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
+
+        cachedRetrofit = retrofit
+        return retrofit
     }
 
-    // Legacy cached instance kept for AuthApi backward compat
-    @PublishedApi
-    internal val retrofit: Retrofit by lazy {
-        // Fallback without auth — used only by AuthApi (login/register pre-token)
+    // Instance for AuthApi (login/register pre-token)
+    val authRetrofit: Retrofit by lazy {
         val baseUrl = BuildConfig.API_URL + "/"
         val client = OkHttpClient.Builder()
             .addInterceptor(HttpLoggingInterceptor().apply { level = HttpLoggingInterceptor.Level.BODY })
@@ -71,15 +80,15 @@ object ApiClient {
     }
 
     /**
-     * Creates an API service. 
+     * Creates an API service.
      * If [context] is provided, it uses buildRetrofit(context) which includes AuthInterceptor.
-     * Otherwise, it uses the default retrofit instance (no auth).
+     * Otherwise, it uses the authRetrofit instance (no auth).
      */
     inline fun <reified T> create(context: Context? = null): T {
         return if (context != null) {
             buildRetrofit(context).create(T::class.java)
         } else {
-            retrofit.create(T::class.java)
+            authRetrofit.create(T::class.java)
         }
     }
 }

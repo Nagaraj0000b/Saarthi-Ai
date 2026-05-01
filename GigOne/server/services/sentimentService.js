@@ -1,65 +1,56 @@
 /**
- * @fileoverview Core sentiment analysis service using GCP Vertex AI.
+ * @fileoverview Core sentiment analysis service using new @google/genai SDK.
+ * Priority: Vertex AI via credential.json → Google AI Studio via GEMINI_API_KEY
  */
 
-const { GoogleGenerativeAI } = require("@google/generative-ai");
-const { VertexAI } = require("@google-cloud/vertexai");
+const { GoogleGenAI } = require("@google/genai");
 const path = require("path");
-const fs = require("fs");
+const fs   = require("fs");
 const { validateSentiment } = require("./sentimentValidation");
 const AppError = require("../utils/appError");
 
-let model;
+let ai;
+let activeModel;
 
-const getModel = () => {
-  if (!model) {
+const VERTEX_MODEL   = "gemini-2.5-flash";
+const AISTUDIO_MODEL = "gemini-2.5-flash";
+
+const getClient = () => {
+  if (!ai) {
     const keyFilename = path.join(__dirname, "..", "credential.json");
-    
-    // 1. Prioritize Vertex AI (Uses GCP Credits/Project Billing)
+
+    // 1. Prioritize Vertex AI (GCP Credits) via service account
     if (fs.existsSync(keyFilename)) {
       try {
         const credentials = JSON.parse(fs.readFileSync(keyFilename, "utf8"));
-        const projectId = credentials.project_id;
-        const location = "us-central1";
-
-        const vertexAI = new VertexAI({
-          project: projectId,
-          location: location,
-          keyFilename: keyFilename,
+        process.env.GOOGLE_APPLICATION_CREDENTIALS = keyFilename;
+        ai = new GoogleGenAI({
+          vertexai : true,
+          project  : credentials.project_id,
+          location : "us-central1",
         });
-
-        model = vertexAI.getGenerativeModel({
-          model: "gemini-2.5-flash",
-        });
-        console.log("Using Vertex AI (GCP Credits) for Gemini");
-        return model;
+        activeModel = VERTEX_MODEL;
+        console.log("Using Vertex AI (GCP Credits) for Gemini —", activeModel);
+        return ai;
       } catch (error) {
-        console.warn("Vertex AI initialization failed, attempting API Key backup:", error.message);
+        console.warn("Vertex AI init failed, falling back to AI Studio:", error.message);
       }
     }
 
-    // 2. Fallback to Google AI SDK (Free Tier)
+    // 2. Fallback to Google AI Studio (free tier)
     const apiKey = process.env.GEMINI_API_KEY;
     if (apiKey) {
-      try {
-        const genAI = new GoogleGenerativeAI(apiKey);
-        model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
-        console.log("Using Google AI SDK (Free Tier) for Gemini");
-        return model;
-      } catch (error) {
-        throw new AppError("Failed to initialize any Gemini provider", 500, {
-          code: "AI_INIT_ERROR",
-          cause: error,
-        });
-      }
+      ai = new GoogleGenAI({ apiKey });
+      activeModel = AISTUDIO_MODEL;
+      console.log("Using Google AI Studio fallback —", activeModel);
+      return ai;
     }
 
     throw new AppError("Google Cloud credential.json or GEMINI_API_KEY not found.", 500, {
       code: "CONFIG_ERROR",
     });
   }
-
-  return model;
+  return ai;
 };
 
 const analyzeMoodText = async (text, { language, sourceStep = "mood" } = {}) => {
@@ -67,14 +58,14 @@ const analyzeMoodText = async (text, { language, sourceStep = "mood" } = {}) => 
     return validateSentiment(null, sourceStep);
   }
 
-  const languageInstruction =
-    language && language !== "English"
-      ? `Note: The user's input might be in ${language} or Hinglish.`
-      : "";
+  const languageInstruction = language && language !== "English"
+    ? `Note: The user's input might be in ${language} or Hinglish.`
+    : "";
 
   const prompt = `
 You are a sentiment analysis module for gig worker wellbeing check-ins.
 Analyze ONLY the emotional state expressed in the text below.
+If the text is gibberish, meaningless nonsense, or lacks any clear emotion, you MUST set "moodLabel" to "invalid".
 ${languageInstruction}
 
 Text to analyze:
@@ -82,23 +73,22 @@ Text to analyze:
 
 Return ONLY valid JSON with exactly these fields:
 {
-  "moodLabel": "happy|neutral|tired|stressed|frustrated|excited",
+  "moodLabel": "happy|neutral|tired|stressed|frustrated|excited|invalid",
   "moodScore": <number from -1.0 to 1.0, where -1 is highly negative, 0 is neutral, 1 is positive>,
-  "summary": "one short summary sentence of their mood",
+  "summary": "one short summary sentence of their mood (or reason why invalid)",
   "suggestion": "one short supportive self-care suggestion",
   "confidence": <number from 0.0 to 1.0>
 }
   `.trim();
 
   try {
-    const result = await getModel().generateContent({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0,
-      },
+    const client   = getClient();
+    const response = await client.models.generateContent({
+      model             : activeModel,
+      contents          : prompt,
+      generationConfig  : { temperature: 0 },
     });
 
-    const response = await result.response;
     let raw = response.candidates[0].content.parts[0].text.trim();
     raw = raw.replace(/^```json\s*/i, "").replace(/\s*```$/, "").trim();
 

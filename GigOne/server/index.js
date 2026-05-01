@@ -9,6 +9,8 @@ const path = require("path");
 const cors = require("cors");
 const dotenv = require("dotenv");
 const passport = require("passport");
+const cron = require("node-cron");
+const { processHourlyTargets } = require("./services/hourlyTargetService");
 const connectDB = require("./config/db");
 const { errorHandler, notFoundHandler } = require("./middleware/errorHandler");
 
@@ -27,8 +29,9 @@ app.use(passport.initialize());
 app.use("/api/auth", require("./routes/auth"));
 app.use("/api/earnings", require("./routes/earnings"));
 app.use("/api/worklogs", require("./routes/worklogs"));
-app.use("/api/chat", require("./routes/chat"));
+app.use("/api/chat-v2", require("./routes/chatV2"));
 app.use("/api/jobs", require("./routes/jobs"));
+app.use("/api/nudges", require("./routes/nudges"));
 app.use("/api/tts", ttsRoutes);
 
 app.get("/", (req, res) => {
@@ -66,11 +69,39 @@ const bootstrap = async () => {
     shutdown("Uncaught exception", error);
   });
 
-  await connectDB();
+  try {
+    await connectDB();
+  } catch (dbError) {
+    console.error("Database connection failed during bootstrap:", dbError);
+    process.exit(1);
+  }
 
-  server = app.listen(PORT, "0.0.0.0", () => {
-    console.log(`Server running on port ${PORT} (bound to 0.0.0.0)`);
-  });
+  try {
+    server = app.listen(PORT, "0.0.0.0", () => {
+      console.log(`Server running on port ${PORT} (bound to 0.0.0.0)`);
+
+      // ── Nudge Engine: only environmental polling ────────────────────────
+      try {
+        require("./services/nudgeEvaluators/environmentalNudgeEvaluator").startPolling();
+        console.log("Nudge Engine: Environmental polling started.");
+      } catch (err) {
+        console.warn("Nudge Engine: Failed to start environmental polling:", err.message);
+      }
+
+      // Hourly Target Nudges
+      cron.schedule("0 * * * *", async () => {
+        try {
+          await processHourlyTargets();
+        } catch (err) {
+          console.error("Error processing hourly target nudges:", err);
+        }
+      });
+      console.log("Nudge Engine: Hourly target cron job scheduled.");
+    });
+  } catch (listenError) {
+    console.error("Server failed to listen on port ${PORT}:", listenError);
+    process.exit(1);
+  }
 
   return server;
 };

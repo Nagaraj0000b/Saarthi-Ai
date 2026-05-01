@@ -26,20 +26,27 @@ class VoiceRecorder(private val context: Context) {
         val file = File(cacheDir, "saarthi_voice_${System.currentTimeMillis()}.webm")
         outputFile = file
 
-        recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-            MediaRecorder(context)  // API 31+ constructor
-        } else {
-            @Suppress("DEPRECATION")
-            MediaRecorder()
-        }.apply {
-            setAudioSource(MediaRecorder.AudioSource.MIC)
-            setOutputFormat(MediaRecorder.OutputFormat.WEBM)
-            setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
-            setAudioSamplingRate(16000)
-            setAudioEncodingBitRate(64000)
-            setOutputFile(file.absolutePath)
-            prepare()
-            start()
+        try {
+            recorder = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+                MediaRecorder(context)  // API 31+ constructor
+            } else {
+                @Suppress("DEPRECATION")
+                MediaRecorder()
+            }.apply {
+                setAudioSource(MediaRecorder.AudioSource.MIC)
+                setOutputFormat(MediaRecorder.OutputFormat.WEBM)
+                setAudioEncoder(MediaRecorder.AudioEncoder.OPUS)
+                setAudioSamplingRate(16000)
+                setAudioEncodingBitRate(64000)
+                setOutputFile(file.absolutePath)
+                prepare()
+                start()
+            }
+        } catch (e: Exception) {
+            recorder?.release()
+            recorder = null
+            outputFile = null
+            // Log error or notify caller via callback if necessary
         }
     }
 

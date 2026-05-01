@@ -13,7 +13,12 @@ if (envFile.exists()) {
     envProperties.load(FileInputStream(envFile))
 }
 
-val apiUrl = envProperties.getProperty("API_URL", "http://10.0.2.2:5000/api/")
+val apiUrl = if (envProperties.containsKey("API_URL")) {
+    envProperties.getProperty("API_URL")
+} else {
+    // Throw error during build if API_URL is missing to prevent accidental production release with dev endpoints
+    throw GradleException("API_URL not found in .env file. Please define API_URL for the build to proceed.")
+}
 
 android {
     namespace = "com.gigone.saarthi"

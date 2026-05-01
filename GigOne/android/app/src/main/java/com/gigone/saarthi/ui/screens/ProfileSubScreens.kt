@@ -2,7 +2,6 @@ package com.gigone.saarthi.ui.screens
 
 import android.widget.Toast
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -17,8 +16,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -27,6 +24,8 @@ import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
+import com.gigone.saarthi.data.JobInfo
+import com.gigone.saarthi.data.SkillInfo
 import com.gigone.saarthi.ui.theme.AppColors
 import com.gigone.saarthi.util.TokenManager
 
@@ -103,7 +102,7 @@ fun AccountSettingsScreen(navController: NavController, onLogout: () -> Unit) {
                 title = "Delete My Account",
                 subtitle = "Permanently delete all your data and history",
                 isDestructive = true,
-                onClick = onLogout // Usually goes to a confirm dialog, mapped to logout for simplicity
+                onClick = onLogout
             )
         }
     }
@@ -145,7 +144,7 @@ fun ManageLanguagesScreen(navController: NavController) {
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ManageJobsScreen(
     navController: NavController,
@@ -156,15 +155,10 @@ fun ManageJobsScreen(
     val selectedSkills = remember { TokenManager.getSkills(context) }
     
     val isLoading by vm.isLoading.collectAsStateWithLifecycle()
-    val isSuccess by vm.isSuccess.collectAsStateWithLifecycle()
     val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
-    LaunchedEffect(isSuccess) {
-        if (isSuccess) {
-            Toast.makeText(context, "Jobs updated!", Toast.LENGTH_SHORT).show()
-            vm.clearStatus()
-        }
-    }
+    var platform by remember { mutableStateOf("") }
+    var jobType by remember { mutableStateOf("") }
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -173,47 +167,200 @@ fun ManageJobsScreen(
         }
     }
 
-    val allJobs = listOf(
-        "Uber", "Ola", "Swiggy", "Zomato", "Blinkit", "Zepto", "Rapido", 
-        "Amazon Flex", "BigBasket", "Delhivery", "BluSmart", "Dunzo", 
-        "Namma Yatri", "BlueDart", "JioMart", "InDriver",
-        "Urban Company", "Local Plumber", "Local Electrician", "Home Cleaning Co",
-        "Elderly Care", "Pet Walker",
-        "DataEntry Inc", "SupportHero", "Virtual Assistant Hub", "Translation Pro",
-        "Other"
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
             TopAppBar(
-                title = { Text("Jobs", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { 
+                    Column {
+                        Text("Jobs", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        if (isLoading) {
+                            Text("Saving...", color = AppColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = { 
-                        vm.syncProfile(selectedSkills, selectedJobs)
-                        navController.popBackStack()
-                    }) {
+                    IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.BgCard)
             )
             Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                SearchAndAddSection(
-                    title = "My Jobs",
-                    subtitle = "Search or add jobs you work for.",
-                    selectedItems = selectedJobs,
-                    suggestions = allJobs,
-                    placeholder = "Search or type job",
-                    chipColor = AppColors.Accent,
-                    onAdd = { newJob -> if (newJob.isNotBlank()) selectedJobs = selectedJobs + newJob },
-                    onRemove = { jobToRemove -> selectedJobs = selectedJobs - jobToRemove }
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.BgCard)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("My Jobs", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = AppColors.TextPrimary)
+                        Text("Add the platforms and jobs you currently work on.", fontSize = 14.sp, color = AppColors.TextSecondary)
+                        Spacer(Modifier.height(16.dp))
+
+                        if (selectedJobs.isNotEmpty()) {
+                            selectedJobs.forEach { job ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = AppColors.Accent.copy(alpha = 0.12f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.Accent.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text("${job.jobType} on ${job.platform}", color = AppColors.Accent, fontSize = 14.sp, fontWeight = FontWeight.Medium)
+                                        }
+                                        IconButton(onClick = {
+                                            val newList = selectedJobs.filter { it != job }
+                                            selectedJobs = newList
+                                            vm.syncProfileDebounced(selectedSkills, newList)
+                                        }, modifier = Modifier.size(24.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = AppColors.Accent)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
+
+                        val platformToJobsMap = mapOf(
+                            "Amazon MTurk" to listOf("Data Entry", "Online Surveys", "Image Tagging", "Transcription"),
+                            "Belay" to listOf("Virtual Assistance", "Scheduling", "Digital Marketing"),
+                            "Blinkit" to listOf("Food Delivery", "Grocery Delivery", "Parcel Delivery"),
+                            "BluSmart" to listOf("Ride-hailing (Car)", "Ride-hailing (Bike)", "Auto-Rickshaw"),
+                            "Canva Creators" to listOf("Graphic Illustration", "Video Editing", "Freelance Writing"),
+                            "Clickworker" to listOf("Data Entry", "Online Surveys", "Image Tagging", "Transcription"),
+                            "Fiverr" to listOf("Graphic Illustration", "Video Editing", "Freelance Writing", "Virtual Assistance", "Scheduling", "Digital Marketing"),
+                            "Freelancer" to listOf("Software Development", "Cyber-security", "Algorithm Programming"),
+                            "Namma Yatri" to listOf("Ride-hailing (Car)", "Ride-hailing (Bike)", "Auto-Rickshaw"),
+                            "NoBroker" to listOf("House Cleaning", "Plumbing", "Carpentry", "Appliance Repair"),
+                            "Ola" to listOf("Ride-hailing (Car)", "Ride-hailing (Bike)", "Auto-Rickshaw"),
+                            "Pepper Content" to listOf("Graphic Illustration", "Video Editing", "Freelance Writing"),
+                            "Porter" to listOf("Food Delivery", "Grocery Delivery", "Parcel Delivery"),
+                            "Rapido" to listOf("Ride-hailing (Car)", "Ride-hailing (Bike)", "Auto-Rickshaw"),
+                            "Shadowfax" to listOf("Food Delivery", "Grocery Delivery", "Parcel Delivery"),
+                            "SquadStack" to listOf("Data Entry", "Online Surveys", "Image Tagging", "Transcription"),
+                            "Swiggy" to listOf("Food Delivery", "Grocery Delivery", "Parcel Delivery"),
+                            "Toloka" to listOf("Data Entry", "Online Surveys", "Image Tagging", "Transcription"),
+                            "Toptal" to listOf("Software Development", "Cyber-security", "Algorithm Programming"),
+                            "Turing" to listOf("Software Development", "Cyber-security", "Algorithm Programming"),
+                            "Unacademy" to listOf("Academic Tutoring", "Language Teaching", "Music Lessons"),
+                            "Uber" to listOf("Ride-hailing (Car)", "Ride-hailing (Bike)", "Auto-Rickshaw"),
+                            "Upwork" to listOf("Software Development", "Cyber-security", "Algorithm Programming", "Graphic Illustration", "Video Editing", "Freelance Writing", "Virtual Assistance", "Scheduling", "Digital Marketing"),
+                            "Urban Company" to listOf("House Cleaning", "Plumbing", "Carpentry", "Appliance Repair", "Salon at Home", "Massage Therapy", "Men Grooming"),
+                            "UrbanPro" to listOf("Academic Tutoring", "Language Teaching", "Music Lessons"),
+                            "Vedantu" to listOf("Academic Tutoring", "Language Teaching", "Music Lessons"),
+                            "Wishup" to listOf("Virtual Assistance", "Scheduling", "Digital Marketing"),
+                            "YesMadam" to listOf("Salon at Home", "Massage Therapy", "Men Grooming"),
+                            "Zepto" to listOf("Food Delivery", "Grocery Delivery", "Parcel Delivery"),
+                            "Zomato" to listOf("Food Delivery", "Grocery Delivery", "Parcel Delivery")
+                        )
+
+                        var platformExpanded by remember { mutableStateOf(false) }
+                        val platformOptions = platformToJobsMap.keys.toList().sorted()
+                        val filteredPlatforms = platformOptions.filter { it.contains(platform, ignoreCase = true) }
+
+                        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)) {
+                            OutlinedTextField(
+                                value = platform,
+                                onValueChange = { 
+                                    platform = it
+                                    platformExpanded = true
+                                },
+                                label = { Text("Platform", color = AppColors.TextSecondary) },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = AppColors.BgDeep, unfocusedContainerColor = AppColors.BgDeep,
+                                    focusedBorderColor = AppColors.Accent, unfocusedBorderColor = AppColors.BorderSubtle,
+                                    focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
+                                )
+                            )
+                            DropdownMenu(
+                                expanded = platformExpanded && filteredPlatforms.isNotEmpty(),
+                                onDismissRequest = { platformExpanded = false },
+                                modifier = Modifier.background(AppColors.BgCard).fillMaxWidth(0.85f).heightIn(max = 250.dp),
+                                properties = androidx.compose.ui.window.PopupProperties(focusable = false)
+                            ) {
+                                filteredPlatforms.forEach { selectionOption ->
+                                    DropdownMenuItem(
+                                        text = { Text(selectionOption, color = AppColors.TextPrimary) },
+                                        onClick = {
+                                            platform = selectionOption
+                                            platformExpanded = false
+                                            jobType = ""
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        var jobTypeExpanded by remember { mutableStateOf(false) }
+                        val jobTypeOptions = platformToJobsMap[platform] ?: emptyList()
+                        val filteredJobTypes = jobTypeOptions.filter { it.contains(jobType, ignoreCase = true) }
+
+                        Box(modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp)) {
+                            OutlinedTextField(
+                                value = jobType,
+                                onValueChange = {
+                                    jobType = it
+                                    jobTypeExpanded = true
+                                },
+                                label = { Text(if (platform.isBlank()) "Select Platform first" else "Job Type", color = AppColors.TextSecondary) },
+                                modifier = Modifier.fillMaxWidth(),
+                                enabled = platform.isNotBlank(),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = AppColors.BgDeep, unfocusedContainerColor = AppColors.BgDeep,
+                                    focusedBorderColor = AppColors.Accent, unfocusedBorderColor = AppColors.BorderSubtle,
+                                    focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary,
+                                    disabledContainerColor = AppColors.BgDeep, disabledBorderColor = AppColors.BorderSubtle,
+                                    disabledTextColor = AppColors.TextMuted, disabledLabelColor = AppColors.TextMuted
+                                )
+                            )
+                            DropdownMenu(
+                                expanded = jobTypeExpanded && filteredJobTypes.isNotEmpty(),
+                                onDismissRequest = { jobTypeExpanded = false },
+                                modifier = Modifier.background(AppColors.BgCard).fillMaxWidth(0.85f).heightIn(max = 250.dp),
+                                properties = androidx.compose.ui.window.PopupProperties(focusable = false)
+                            ) {
+                                filteredJobTypes.forEach { selectionOption ->
+                                    DropdownMenuItem(
+                                        text = { Text(selectionOption, color = AppColors.TextPrimary) },
+                                        onClick = {
+                                            jobType = selectionOption
+                                            jobTypeExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        Button(
+                            onClick = {
+                                if (platform.isNotBlank() && jobType.isNotBlank()) {
+                                    val newJob = JobInfo(platform = platform.trim(), jobType = jobType.trim(), domain = "")
+                                    val newList = selectedJobs + newJob
+                                    selectedJobs = newList
+                                    platform = ""
+                                    jobType = ""
+                                    vm.syncProfileDebounced(selectedSkills, newList)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(45.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.Accent)
+                        ) {
+                            Text("Add Job", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable
 fun ManageSkillsScreen(
     navController: NavController,
@@ -223,15 +370,11 @@ fun ManageSkillsScreen(
     var selectedSkills by remember { mutableStateOf(TokenManager.getSkills(context)) }
     val selectedJobs = remember { TokenManager.getJobs(context) }
     
-    val isSuccess by vm.isSuccess.collectAsStateWithLifecycle()
+    val isLoading by vm.isLoading.collectAsStateWithLifecycle()
     val errorMessage by vm.errorMessage.collectAsStateWithLifecycle()
 
-    LaunchedEffect(isSuccess) {
-        if (isSuccess) {
-            Toast.makeText(context, "Skills updated!", Toast.LENGTH_SHORT).show()
-            vm.clearStatus()
-        }
-    }
+    var skillName by remember { mutableStateOf("") }
+    var yearsExp by remember { mutableStateOf("") }
 
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
@@ -240,42 +383,142 @@ fun ManageSkillsScreen(
         }
     }
 
-    val allSkills = listOf(
-        "Bike & Scooter Driving",
-        "Car & Cab Driving",
-        "Heavy Lifting & Moving",
-        "Cleaning & House Chores",
-        "Skilled Trades & Repairs",
-        "Care & Assistance",
-        "Computer & Admin Work",
-        "Customer Support & Calls"
-    )
-
     Box(modifier = Modifier.fillMaxSize()) {
         Column(modifier = Modifier.fillMaxSize().background(AppColors.BgDeep).statusBarsPadding()) {
             TopAppBar(
-                title = { Text("Skill Sets", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold) },
+                title = { 
+                    Column {
+                        Text("Skill Sets", color = AppColors.TextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                        if (isLoading) {
+                            Text("Saving...", color = AppColors.Primary, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                },
                 navigationIcon = {
-                    IconButton(onClick = { 
-                        vm.syncProfile(selectedSkills, selectedJobs)
-                        navController.popBackStack()
-                    }) {
+                    IconButton(onClick = { navController.popBackStack() }) {
                         Icon(Icons.Default.ArrowBack, contentDescription = "Back", tint = AppColors.TextPrimary)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = AppColors.BgCard)
             )
             Column(modifier = Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-                SearchAndAddSection(
-                    title = "My Skills",
-                    subtitle = "Select skills you possess for better job matches.",
-                    selectedItems = selectedSkills,
-                    suggestions = allSkills,
-                    placeholder = "Search or select skill",
-                    chipColor = AppColors.Success,
-                    onAdd = { newSkill -> if (newSkill.isNotBlank()) selectedSkills = selectedSkills + newSkill },
-                    onRemove = { skillToRemove -> selectedSkills = selectedSkills - skillToRemove }
-                )
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = AppColors.BgCard)
+                ) {
+                    Column(modifier = Modifier.padding(20.dp)) {
+                        Text("My Skills", fontWeight = FontWeight.SemiBold, fontSize = 18.sp, color = AppColors.TextPrimary)
+                        Text("Add your skills and experience to improve ML matching.", fontSize = 14.sp, color = AppColors.TextSecondary)
+                        Spacer(Modifier.height(16.dp))
+
+                        if (selectedSkills.isNotEmpty()) {
+                            selectedSkills.forEach { skill ->
+                                Surface(
+                                    shape = RoundedCornerShape(8.dp),
+                                    color = AppColors.Success.copy(alpha = 0.12f),
+                                    border = androidx.compose.foundation.BorderStroke(1.dp, AppColors.Success.copy(alpha = 0.4f)),
+                                    modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.padding(12.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Column {
+                                            Text(skill.name, color = AppColors.Success, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                            Text("${skill.yearsOfExperience} years exp (${skill.skillLevel} Level)", color = AppColors.TextSecondary, fontSize = 12.sp)
+                                        }
+                                        IconButton(onClick = {
+                                            val newList = selectedSkills.filter { it != skill }
+                                            selectedSkills = newList
+                                            vm.syncProfileDebounced(newList, selectedJobs)
+                                        }, modifier = Modifier.size(24.dp)) {
+                                            Icon(Icons.Default.Close, contentDescription = "Remove", tint = AppColors.Success)
+                                        }
+                                    }
+                                }
+                            }
+                            Spacer(Modifier.height(16.dp))
+                        }
+
+                        var skillExpanded by remember { mutableStateOf(false) }
+                        val skillOptions = listOf("Administrative Support", "Arts/Music Instruction", "Assembly", "Attention to Detail", "Complex Project Management", "Content Creation", "Cosmetology/Beauty", "Customer Service", "Cyber-security", "Data Science", "Data Tagging", "Delivery Services", "Domestic Cleaning", "Driving/Ride-hailing", "Fast Typing", "Graphic Design", "Handyman/Repair", "Language Proficiency", "Navigation", "Personal Care", "Social Media Management", "Software Development", "Subject Tutoring", "Time Management", "Video Editing")
+
+                        ExposedDropdownMenuBox(
+                            expanded = skillExpanded,
+                            onExpandedChange = { skillExpanded = it }
+                        ) {
+                            OutlinedTextField(
+                                value = skillName,
+                                onValueChange = {},
+                                readOnly = true,
+                                label = { Text("Skill Name", color = AppColors.TextSecondary) },
+                                modifier = Modifier.menuAnchor(type = MenuAnchorType.PrimaryNotEditable).fillMaxWidth().padding(bottom = 8.dp),
+                                trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = skillExpanded) },
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = AppColors.BgDeep, unfocusedContainerColor = AppColors.BgDeep,
+                                    focusedBorderColor = AppColors.Success, unfocusedBorderColor = AppColors.BorderSubtle,
+                                    focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
+                                )
+                            )
+                            ExposedDropdownMenu(
+                                expanded = skillExpanded,
+                                onDismissRequest = { skillExpanded = false },
+                                modifier = Modifier.background(AppColors.BgCard).heightIn(max = 250.dp)
+                            ) {
+                                skillOptions.forEach { selectionOption ->
+                                    DropdownMenuItem(
+                                        text = { Text(selectionOption, color = AppColors.TextPrimary) },
+                                        onClick = {
+                                            skillName = selectionOption
+                                            skillExpanded = false
+                                        }
+                                    )
+                                }
+                            }
+                        }
+
+                        OutlinedTextField(
+                            value = yearsExp,
+                            onValueChange = { yearsExp = it },
+                            label = { Text("Years of Experience", color = AppColors.TextSecondary) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth().padding(bottom = 16.dp),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedContainerColor = AppColors.BgDeep, unfocusedContainerColor = AppColors.BgDeep,
+                                focusedBorderColor = AppColors.Success, unfocusedBorderColor = AppColors.BorderSubtle,
+                                focusedTextColor = AppColors.TextPrimary, unfocusedTextColor = AppColors.TextPrimary
+                            )
+                        )
+
+                        Button(
+                            onClick = {
+                                val exp = yearsExp.toIntOrNull() ?: 0
+                                if (skillName.isNotBlank()) {
+                                    // Let the frontend automatically suggest a skill level based on years to match the backend ML logic
+                                    val sLevel = when {
+                                        exp <= 1 -> "Low"
+                                        exp <= 5 -> "Medium"
+                                        else -> "High"
+                                    }
+                                    val newSkill = SkillInfo(name = skillName.trim(), yearsOfExperience = exp, skillLevel = sLevel)
+                                    val newList = selectedSkills + newSkill
+                                    selectedSkills = newList
+                                    skillName = ""
+                                    yearsExp = ""
+                                    vm.syncProfileDebounced(newList, selectedJobs)
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().height(45.dp),
+                            shape = RoundedCornerShape(12.dp),
+                            colors = ButtonDefaults.buttonColors(containerColor = AppColors.Success)
+                        ) {
+                            Text("Add Skill", fontWeight = FontWeight.Bold)
+                        }
+                    }
+                }
             }
         }
     }
@@ -346,7 +589,7 @@ fun ManageTargetScreen(navController: NavController) {
 }
 
 /**
- * A highly reusable component for searching, adding, and deleting items.
+ * A highly reusable component for searching, adding, and deleting simple string items.
  */
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalLayoutApi::class)
 @Composable

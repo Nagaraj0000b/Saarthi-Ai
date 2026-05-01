@@ -143,11 +143,11 @@ fun SignInScreen(
                                 TokenManager.saveToken(context, response.token)
                                 TokenManager.saveUserName(context, response.user.name) // Save full name
                                 TokenManager.saveUserEmail(context, email) // Save email used to login
-                                
+                                response.user.gender?.let { TokenManager.saveUserGender(context, it) }
+
                                 // Sync skills and jobs from backend
-                                TokenManager.saveSkills(context, response.user.skills.toSet())
-                                TokenManager.saveJobs(context, response.user.registeredJobs.toSet())
-                                
+                                TokenManager.saveSkills(context, response.user.skills)
+                                TokenManager.saveJobs(context, response.user.registeredJobs)                                
                                 onSignInSuccess()
                             } catch (e: retrofit2.HttpException) {
                                 errorMessage = "Invalid email or password. Please try again."
