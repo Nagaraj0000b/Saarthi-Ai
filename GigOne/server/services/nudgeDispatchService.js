@@ -44,6 +44,7 @@ const dispatchNudge = async (userId, nudgeData) => {
     data = {},
     metadata = {},
     expiresInMs,
+    isDemo = false,
   } = nudgeData;
 
   if (!userId || !type || !title || !body) {
@@ -52,7 +53,11 @@ const dispatchNudge = async (userId, nudgeData) => {
   }
 
   // ── Throttle Check ─────────────────────────────────────────────────────
-  const throttleResult = await canSendNudge(userId, type);
+  let throttleResult = { allowed: true, reason: "Demo nudge bypass" };
+  if (!isDemo) {
+    throttleResult = await canSendNudge(userId, type);
+  }
+
 
   if (!throttleResult.allowed) {
     console.log(`[NudgeDispatch] THROTTLED for user ${userId}: ${throttleResult.reason}`);
@@ -81,18 +86,19 @@ const dispatchNudge = async (userId, nudgeData) => {
       metadata,
       status: "pending",
       expiresAt,
+      isDemo,
       // We can add a virtual or a field for the day if we want more precise indexing,
       // but the unique index on {userId, type, createdAt} with rounded precision
       // is handled by the logic in canSendNudge and the DB constraint.
     });
 
     console.log(
-      `[NudgeDispatch] ✅ Nudge sent | type=${type} | user=${userId} | priority=${priority} | title="${title}"`
+      `[NudgeDispatch]  Nudge sent | type=${type} | user=${userId} | priority=${priority} | title="${title}"`
     );
 
     return nudge;
   } catch (error) {
-    console.error(`[NudgeDispatch] ❌ Failed to create nudge:`, error.message);
+    console.error(`[NudgeDispatch]  Failed to create nudge:`, error.message);
     return null;
   }
 };

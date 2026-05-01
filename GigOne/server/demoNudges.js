@@ -47,7 +47,7 @@ const SCENARIOS = {
     title: "📅 Tomorrow's Outlook",
     body: "Tomorrow is expected to be a high-demand day. Consider starting your shift 1 hour earlier!",
     emoji: "📅",
-    priority: "low",
+    priority: "normal",
   },
 };
 

@@ -10,6 +10,7 @@ const { Translate } = require("@google-cloud/translate").v2;
 const AppError = require("../utils/appError");
 
 // Maps frontend language names → BCP-47 codes for GCP STT
+// Synchronized with the Android UI (14 languages)
 const LANGUAGE_TO_BCP47 = {
   kannada: "kn-IN",
   hindi: "hi-IN",
@@ -21,10 +22,18 @@ const LANGUAGE_TO_BCP47 = {
   marathi: "mr-IN",
   punjabi: "pa-IN",
   english: "en-IN",
+  urdu: "ur-IN",
+  odia: "or-IN",
+  assamese: "as-IN",
+  bhojpuri: "hi-IN", // Fallback to Hindi for STT
 };
 
-// All supported language codes (used as alternatives when a primary is set)
-const ALL_LANGUAGE_CODES = ["en-IN", "hi-IN", "kn-IN", "ta-IN", "te-IN", "ml-IN", "bn-IN", "gu-IN", "mr-IN", "pa-IN"];
+// All supported language codes
+const ALL_LANGUAGE_CODES = [
+  "en-IN", "hi-IN", "kn-IN", "ta-IN", "te-IN", 
+  "ml-IN", "bn-IN", "gu-IN", "mr-IN", "pa-IN",
+  "ur-IN", "or-IN", "as-IN"
+];
 
 /**
  * Resolves the BCP-47 language code from a frontend language name string.

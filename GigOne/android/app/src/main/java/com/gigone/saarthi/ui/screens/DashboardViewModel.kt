@@ -77,18 +77,20 @@ class DashboardViewModel(application: Application) : AndroidViewModel(applicatio
                 val newNudges = nudgeApi.getActiveNudges().distinctBy { it.type }
                 val currentIds = _activeNudges.value.map { it._id }.toSet()
                 
-                // Only trigger push notifications if this is NOT the first time we load the dashboard.
-                // If it is the first load, we just silently show them as cards to prevent crashing the OS.
-                if (!isFirstLoad) {
-                    newNudges.forEach { nudge ->
-                        if (!currentIds.contains(nudge._id) && (nudge.priority == "urgent" || nudge.priority == "high")) {
-                            com.gigone.saarthi.util.NotificationHelper.showNudgeNotification(
-                                ctx, 
-                                title = nudge.title, 
-                                body = nudge.body,
-                                id = nudge._id.hashCode()
-                            )
-                        }
+                newNudges.forEach { nudge ->
+                    // Trigger notification if:
+                    // 1. It's a new nudge AND it's a demo nudge (Bypass isFirstLoad and priority)
+                    // 2. It's a new nudge AND NOT first load AND it's urgent/high priority
+                    val isNew = !currentIds.contains(nudge._id)
+                    val shouldNotify = isNew && (nudge.isDemo || (!isFirstLoad && (nudge.priority == "urgent" || nudge.priority == "high" || nudge.priority == "normal")))
+                    
+                    if (shouldNotify) {
+                        com.gigone.saarthi.util.NotificationHelper.showNudgeNotification(
+                            ctx, 
+                            title = nudge.title, 
+                            body = nudge.body,
+                            id = nudge._id.hashCode()
+                        )
                     }
                 }
                 

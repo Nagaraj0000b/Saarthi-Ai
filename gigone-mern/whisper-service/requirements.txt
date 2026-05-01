@@ -1,6 +1,0 @@
-flask==3.0.0
-flask-cors==4.0.0
-openai-whisper==20250625
-gunicorn==21.2.0
-soundfile
-python-multipart

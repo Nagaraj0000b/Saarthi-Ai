@@ -52,9 +52,13 @@ const normalizeLanguageName = (lang) => {
     mar: "Marathi", marathi: "Marathi",
     pun: "Punjabi", punjabi: "Punjabi",
     guj: "Gujarati", gujarati: "Gujarati",
+    urd: "Urdu", urdu: "Urdu",
+    odi: "Odia", odia: "Odia",
+    ass: "Assamese", assamese: "Assamese",
+    bho: "Bhojpuri", bhojpuri: "Bhojpuri",
     eng: "English", english: "English",
   };
-  return map[l] || l;
+  return map[l] || l.charAt(0).toUpperCase() + l.slice(1);
 };
 
 const trimPrompt = (prompt) =>
