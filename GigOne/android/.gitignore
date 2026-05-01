@@ -79,5 +79,6 @@ yarn-error.log
 # Environment and Secrets
 .env
 .env.*
+!.env.example
 key.properties
 signing.properties
